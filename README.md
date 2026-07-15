@@ -1,0 +1,382 @@
+# OKF-go — Open Knowledge Format Tool
+
+The **Open Knowledge Format (OKF)** is a vendor-neutral, lightweight specification for structuring organizational knowledge (documentation, runbooks, metrics, database schemas, and API definitions) into machine-readable, human-friendly Markdown files. 
+
+By representing knowledge as a directory of Markdown files with structured YAML frontmatter, OKF bridges the gap between structured metadata repositories and unstructured text documentation, serving as an ideal substrate for **AI agents**, **Retrieval-Augmented Generation (RAG)** pipelines, and the **Model Context Protocol (MCP)**.
+
+The **OKF-go Tool** (written in Go) provides a high-performance suite of utilities to validate bundles, harvest metadata from databases and APIs, assemble context for Large Language Models (LLMs), and run an MCP Server.
+
+---
+
+## 🚀 Key Features
+
+*   **Conformance Engine & Linter (`okf lint`):** Validates knowledge bundles for YAML frontmatter correctness, required attributes, and broken internal/external markdown links.
+*   **Metadata Harvesters (`okf harvest`):** Automatically extracts and converts schemas from databases (PostgreSQL, Cloud Spanner, BigQuery), OpenAPI specifications (Swagger), and Protobuf files into OKF concept documents.
+*   **Context Assembler (`okf assemble`):** Performs graph-based Breadth-First Search (BFS) starting from a core concept, resolving related concepts within a specified character/token budget to build pruned, high-quality prompt context.
+*   **Model Context Protocol Server (`okf server`):** Exposes your knowledge base directly to MCP-compatible AI clients (e.g. Claude Desktop, Cursor, Antigravity) via Stdio or SSE transport.
+
+---
+
+## 🛠️ Getting Started
+
+### Prerequisites
+
+*   Go `1.26` or higher
+
+### Building the CLI Tool
+
+Clone the repository and compile the binary:
+
+```bash
+# Build the binary locally
+go build -o okf main.go
+
+# Verify installation
+./okf help
+```
+
+---
+
+## 📦 Installation and Distribution
+
+This section details how to install and run the pre-built `okf` CLI binaries, how developers can automate releases, and how to structure and bundle OKF repositories.
+
+### 1. Installing the Pre-Built CLI
+
+You can install the `okf` CLI without building it from source using the options below:
+
+#### Option A: One-Line Shell Installer (macOS & Linux)
+Run the automated installer script to download, verify, and install the correct binary for your OS and CPU architecture:
+```bash
+curl -sSfL https://raw.githubusercontent.com/abcubed3/okf/main/install.sh | sh
+```
+*By default, this installs to `/usr/local/bin` (if writeable), `~/.local/bin`, or `./bin` (fallback).*
+
+#### Option B: GitHub Releases (Manual Download)
+Go to the [Releases](https://github.com/abcubed3/okf/releases) page on GitHub and download the appropriate archive for your operating system:
+*   **macOS (Apple Silicon / M-series):** `okf_<version>_darwin_arm64.tar.gz`
+*   **macOS (Intel):** `okf_<version>_darwin_amd64.tar.gz`
+*   **Linux (64-bit AMD64):** `okf_<version>_linux_amd64.tar.gz`
+*   **Linux (ARM64 / Graviton):** `okf_<version>_linux_arm64.tar.gz`
+*   **Windows (64-bit):** `okf_<version>_windows_amd64.zip`
+
+Extract the binary and add it to your system's `PATH`.
+
+#### Option C: Homebrew (macOS & Linux)
+If you configure a Homebrew Tap repository (e.g. `github.com/abcubed3/homebrew-tap`), users can install the tool using:
+```bash
+brew tap abcubed3/tap
+brew install okf
+```
+
+---
+
+### 2. Task Automation (Taskfile)
+
+The project utilizes [Task](https://taskfile.dev) for local development and build orchestration. If you have `task` installed, you can use the following commands:
+
+*   **Build locally:** `task build` (compiles and outputs `./okf` with build metadata)
+*   **Run unit tests:** `task test`
+*   **Run lint checks:** `task lint`
+*   **Local cross-compilation:** `task cross-compile` (outputs multi-platform binaries to `dist/bin/`)
+*   **Clean build directory:** `task clean`
+
+If you don't have `task` installed, you can build manually via:
+```bash
+go build -o okf main.go
+```
+
+---
+
+### 3. Automated Releasing
+
+Releases are built, packaged, and published to GitHub automatically using [GoReleaser](https://goreleaser.com) and GitHub Actions.
+
+#### How to trigger a new release:
+1. Ensure all changes are committed and pushed to the `main` branch.
+2. Create and push a new semantic version tag:
+   ```bash
+   git tag -a v1.0.0 -m "Release v1.0.0"
+   git push origin v1.0.0
+   ```
+3. The **Release** GitHub Action workflow (`.github/workflows/release.yml`) will automatically run, compile the code for all major target operating systems/architectures, package them into archives, and publish a new GitHub Release with release notes and checksums.
+
+### 4. Packaging an OKF Knowledge Bundle
+
+An **OKF Knowledge Bundle** is a structured directory of Markdown files. Bundles can be versioned, archived, and distributed easily.
+
+#### Folder Structure Layout
+
+A typical bundle layout looks like this:
+
+```text
+my-knowledge-bundle/
+├── index.md                  # Optional directory index for progressive disclosure
+├── log.md                    # Optional change history log
+├── tables/                   # Conceptual namespace for DB tables
+│   ├── users.md
+│   └── orders.md
+├── apis/                     # Conceptual namespace for API routes
+│   └── create_user.md
+└── playbooks/                # Runbooks and guides
+    └── database_cleanup.md
+```
+
+#### Compressing the Bundle for Distribution
+
+To distribute a bundle (e.g., to upload to an ingestion pipeline, send to an agent, or attach to a deployment artifact), you can compress the bundle folder:
+
+**Using tar (Gzipped Tarball):**
+```bash
+# Compress the bundle
+tar -czvf my-bundle-v1.0.tar.gz -C my-knowledge-bundle/ .
+
+# Extract the bundle
+tar -xzvf my-bundle-v1.0.tar.gz -C /path/to/destination/
+```
+
+**Using zip:**
+```bash
+# Compress the bundle
+zip -r my-bundle-v1.0.zip my-knowledge-bundle/
+
+# Extract the bundle
+unzip my-bundle-v1.0.zip -d /path/to/destination/
+```
+
+> [!TIP]
+> **GitOps Distribution:** Because OKF bundles are plain-text Markdown files, the recommended way to distribute, track changes, and review updates to your knowledge graph is via **Git**. You can run `okf lint` as a pre-commit hook or CI/CD workflow step.
+
+---
+
+## 📄 Knowledge Format Specification
+
+Each concept document inside a bundle consists of two parts:
+1.  **YAML Frontmatter:** Metadata enclosed within triple-dashed lines (`---`).
+2.  **Markdown Body:** Detailed human-readable content and documentation.
+
+### Example Concept Document (`tables/orders.md`):
+
+```markdown
+---
+type: BigQuery Table
+title: Orders Table
+description: Contains one record per customer transaction.
+resource: https://console.cloud.google.com/bigquery?p=bigquery-public-data&d=ecommerce&t=orders
+tags: [ecommerce, transactions]
+timestamp: 2026-07-14T20:00:00Z
+---
+
+# Orders Table
+
+The orders table stores customer transaction details including items purchased, totals, and transaction IDs.
+
+## Schema
+*   `transaction_id` (STRING): Unique identifier.
+*   `user_id` (STRING): References [Users Table](users.md).
+*   `value` (FLOAT64): Total value of order.
+```
+
+---
+
+## 💻 CLI Commands & Detailed Documentation
+
+### 1. Linter & Validator (`lint`)
+
+Ensures that the knowledge bundle conforms to the specification. It verifies YAML syntax, ensures required fields are set, and checks that internal Markdown links are not broken.
+
+```bash
+# Lint the bundle in the current directory
+./okf lint
+
+# Lint a bundle at a specific directory
+./okf lint /path/to/my-bundle
+```
+
+*   **Hard Rules (Fails with Error):**
+    *   Syntactically valid YAML frontmatter.
+    *   Presence of the `type` field in frontmatter.
+*   **Soft Rules (Emits Warning):**
+    *   Presence of recommended fields (`title`, `description`).
+    *   Resolves and verifies all relative Markdown links (e.g. `[Users](users.md)`) to guarantee the graph is fully connected and lacks orphaned links.
+
+---
+
+### 2. Schema Harvester (`harvest`)
+
+Extracts metadata from databases, API specs, and protobuf files and generates structured OKF concepts automatically.
+
+#### A. Database Schema Harvesting (`harvest db`)
+
+Supports **PostgreSQL**, **Cloud Spanner**, and **BigQuery**. Connects to the database, queries the information schema, and generates tables, columns, constraints, and relationships as OKF concepts.
+
+```bash
+# PostgreSQL Example
+./okf harvest db \
+  --driver postgres \
+  --conn "postgresql://postgres:password@localhost:5432/my_db?sslmode=disable" \
+  --schema public \
+  --output ./my-bundle/tables
+
+# Cloud Spanner Example
+./okf harvest db \
+  --driver spanner \
+  --conn "projects/my-project/instances/my-instance/databases/my-db" \
+  --output ./my-bundle/tables
+
+# BigQuery Example
+./okf harvest db \
+  --driver bigquery \
+  --conn "projects/my-project" \
+  --dataset "my_dataset" \
+  --output ./my-bundle/tables
+```
+
+#### B. OpenAPI Spec Harvesting (`harvest openapi`)
+
+Parses OpenAPI spec documents (JSON/YAML) and generates OKF concepts representing API endpoints.
+
+```bash
+./okf harvest openapi \
+  --spec ./docs/openapi_spec.yaml \
+  --output ./my-bundle/endpoints
+```
+
+#### C. Protobuf Schema Harvesting (`harvest proto`)
+
+Extracts messages, RPC services, and field definitions from `.proto` schemas.
+
+```bash
+./okf harvest proto \
+  --path ./protos/user_service.proto \
+  --output ./my-bundle/protobufs
+```
+
+---
+
+### 3. Context Assembler (`assemble`)
+
+Traverses the concept relationship graph starting from a target concept ID. Follows relative markdown links up to a configured traversal depth to compile a unified context document for LLMs.
+
+```bash
+./okf assemble tables/orders \
+  --bundle ./testdata/sample \
+  --depth 2 \
+  --direction bidirectional \
+  --format xml \
+  --max-chars 16000
+```
+
+#### CLI Flags:
+*   `--bundle`: Path to the OKF bundle (default: `.` or current directory).
+*   `--depth`: Maximum depth of link traversal (default: `2`).
+*   `--direction`: Traverse `outbound`, `inbound`, or `bidirectional` links (default: `bidirectional`).
+*   `--format`: Output format, either `xml` or `markdown` (default: `xml`).
+*   `--max-chars`: Maximum character budget for the output. If exceeded, traversal stops to prevent context overflow (default: `16000`).
+
+---
+
+### 4. Model Context Protocol Server (`server`)
+
+Exposes the OKF graph as an MCP Server. This allows LLM clients (like Claude Desktop or Cursor) to dynamically discover, search, retrieve, and assemble context from the bundle.
+
+#### Stdio Transport (Standard Input/Output)
+Ideal for local IDE and Desktop applications:
+
+```bash
+./okf server --bundle ./testdata/sample --transport stdio
+```
+
+#### SSE Transport (HTTP Server-Sent Events)
+Ideal for remote integrations or network-based MCP clients:
+
+```bash
+./okf server --bundle ./testdata/sample --transport sse --port 8080
+```
+
+#### Claude Desktop Configuration
+
+To register the OKF MCP server with Claude Desktop, add the server to your `claude_desktop_config.json` (typically located at `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS or `%APPDATA%\Claude\claude_desktop_config.json` on Windows):
+
+```json
+{
+  "mcpServers": {
+    "okf-knowledge": {
+      "command": "/Users/abcubed3/okf-go/okf",
+      "args": [
+        "server",
+        "--bundle",
+        "/Users/abcubed3/okf-go/testdata/sample"
+      ]
+    }
+  }
+}
+```
+
+#### Exposed MCP Capabilities:
+*   **Resources:**
+    *   `okf://index`: A text/markdown list of all concepts in the bundle.
+    *   `okf://concept/{id}`: Resolves the complete document for a concept by its ID.
+*   **Prompts:**
+    *   `okf_concept_context`: Automatically generates an analysis prompt for a concept along with its assembled subgraph.
+*   **Tools:**
+    *   `list_concepts`: Returns summaries of all concepts.
+    *   `search_concepts`: Search matching terms in concept IDs, titles, descriptions, and tags.
+    *   `get_concept`: Fetch raw contents of a concept.
+    *   `assemble_context`: Run depth-traversal context assembly dynamically from the LLM.
+
+---
+
+## 🧪 Testing the Codebase
+
+Unit tests cover the parsing, validation, and assembly logic. Run the test suite:
+
+```bash
+go test ./... -v
+```
+
+To run micro-benchmarks with memory profiling across all packages:
+
+```bash
+task benchmark
+```
+
+See [PERFORMANCE.md](PERFORMANCE.md) for full benchmark results, regression analysis with `benchstat`, and CPU/memory profiling instructions.
+
+---
+
+## 📂 Project Architecture
+
+```text
+okf-go/
+├── main.go                     # CLI entrypoint and subcommand routing
+├── pkg/
+│   ├── bundle/                 # Core structs (Bundle, Concept)
+│   ├── parser/                 # Bundle traverser and frontmatter Markdown parser
+│   ├── validator/              # Conformance and broken link validation
+│   ├── harvester/              # Metadata extractors (DB, OpenAPI, Proto)
+│   ├── assembly/               # Graph builder and BFS context assembler
+│   ├── server/                 # Model Context Protocol (MCP) Server
+│   └── generator/              # Static HTML developer documentation portal compiler
+├── ideas/                      # Roadmap plans and OKF opportunity outlines
+└── testdata/
+    └── sample/                 # Mock bundle for tests and playground
+```
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) to learn how to set up your development environment, run linters, execute unit tests, and submit pull requests.
+
+---
+
+## 👥 Authors
+
+*   **abcubed3** — *Creator & Maintainer* — [GitHub Profile](https://github.com/abcubed3)
+
+---
+
+## 📄 License
+
+This project is licensed under the Apache License 2.0. See the [LICENSE](LICENSE) file for the full text.

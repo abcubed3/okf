@@ -1,0 +1,59 @@
+# https://taskfile.dev
+
+version: '3'
+
+vars:
+  BINARY_NAME: okf
+  VERSION: '{{default "dev" .VERSION}}'
+  COMMIT:
+    sh: git rev-parse --short HEAD 2>/dev/null || echo "none"
+  DATE:
+    sh: date -u +%Y-%m-%dT%H:%M:%SZ
+  LDFLAGS: -s -w -X main.Version={{.VERSION}} -X main.Commit={{.COMMIT}} -X main.Date={{.DATE}}
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
+
+  build:
+    desc: Build the binary locally
+    cmds:
+      - go build -ldflags "{{.LDFLAGS}}" -o {{.BINARY_NAME}} main.go
+
+  test:
+    desc: Run unit tests
+    cmds:
+      - go test ./... -v
+
+  benchmark:
+    desc: Run micro-benchmarks with memory allocations
+    cmds:
+      - go test ./... -bench=. -benchmem -run=^$
+
+  lint:
+    desc: Run linters (go vet, go fmt check)
+    cmds:
+      - go vet ./...
+      - go fmt ./...
+
+  cross-compile:
+    desc: Build binaries locally for macOS, Linux, and Windows
+    cmds:
+      - mkdir -p dist/bin
+      # macOS (Apple Silicon)
+      - GOOS=darwin GOARCH=arm64 go build -ldflags "{{.LDFLAGS}}" -o dist/bin/{{.BINARY_NAME}}-darwin-arm64 main.go
+      # macOS (Intel)
+      - GOOS=darwin GOARCH=amd64 go build -ldflags "{{.LDFLAGS}}" -o dist/bin/{{.BINARY_NAME}}-darwin-amd64 main.go
+      # Linux (64-bit)
+      - GOOS=linux GOARCH=amd64 go build -ldflags "{{.LDFLAGS}}" -o dist/bin/{{.BINARY_NAME}}-linux-amd64 main.go
+      # Linux (ARM64)
+      - GOOS=linux GOARCH=arm64 go build -ldflags "{{.LDFLAGS}}" -o dist/bin/{{.BINARY_NAME}}-linux-arm64 main.go
+      # Windows (64-bit)
+      - GOOS=windows GOARCH=amd64 go build -ldflags "{{.LDFLAGS}}" -o dist/bin/{{.BINARY_NAME}}-windows-amd64.exe main.go
+
+  clean:
+    desc: Remove build directories and binary
+    cmds:
+      - rm -rf dist/bin {{.BINARY_NAME}}
