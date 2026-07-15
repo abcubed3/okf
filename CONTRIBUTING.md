@@ -1,8 +1,8 @@
-# Contributing to OKF CLI
+# Contributing to OKF-go
 
 First off, thank you for taking the time to contribute! 🎉
 
-This document outlines the guidelines and workflow for contributing to the Open Knowledge Format (OKF) CLI tool. Following these instructions helps ensure a smooth, efficient process for everyone involved.
+This document outlines the guidelines and workflow for contributing to OKF-go. Following these instructions helps ensure a smooth, efficient process for everyone involved.
 
 ---
 

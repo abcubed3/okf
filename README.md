@@ -4,7 +4,7 @@ The **Open Knowledge Format (OKF)** is a vendor-neutral, lightweight specificati
 
 By representing knowledge as a directory of Markdown files with structured YAML frontmatter, OKF bridges the gap between structured metadata repositories and unstructured text documentation, serving as an ideal substrate for **AI agents**, **Retrieval-Augmented Generation (RAG)** pipelines, and the **Model Context Protocol (MCP)**.
 
-The **OKF-go Tool** (written in Go) provides a high-performance suite of utilities to validate bundles, harvest metadata from databases and APIs, assemble context for Large Language Models (LLMs), and run an MCP Server.
+The **OKF-go** provides a high-performance suite of utilities to validate bundles, harvest metadata from databases and APIs, assemble context for Large Language Models (LLMs), and run an MCP Server.
 
 ---
 
@@ -13,7 +13,7 @@ The **OKF-go Tool** (written in Go) provides a high-performance suite of utiliti
 *   **Conformance Engine & Linter (`okf lint`):** Validates knowledge bundles for YAML frontmatter correctness, required attributes, and broken internal/external markdown links.
 *   **Metadata Harvesters (`okf harvest`):** Automatically extracts and converts schemas from databases (PostgreSQL, Cloud Spanner, BigQuery), OpenAPI specifications (Swagger), and Protobuf files into OKF concept documents.
 *   **Context Assembler (`okf assemble`):** Performs graph-based Breadth-First Search (BFS) starting from a core concept, resolving related concepts within a specified character/token budget to build pruned, high-quality prompt context.
-*   **Model Context Protocol Server (`okf server`):** Exposes your knowledge base directly to MCP-compatible AI clients (e.g. Claude Desktop, Cursor, Antigravity) via Stdio or SSE transport.
+*   **Model Context Protocol Server (`okf mcp`):** Exposes your knowledge base directly to MCP-compatible AI clients (e.g. Claude Desktop, Cursor, Antigravity) via Stdio or SSE transport.
 
 ---
 
@@ -276,7 +276,7 @@ Traverses the concept relationship graph starting from a target concept ID. Foll
 
 ---
 
-### 4. Model Context Protocol Server (`server`)
+### 4. Model Context Protocol Server (`mcp`)
 
 Exposes the OKF graph as an MCP Server. This allows LLM clients (like Claude Desktop or Cursor) to dynamically discover, search, retrieve, and assemble context from the bundle.
 
@@ -284,19 +284,19 @@ Exposes the OKF graph as an MCP Server. This allows LLM clients (like Claude Des
 Ideal for local IDE and Desktop applications:
 
 ```bash
-./okf server --bundle ./testdata/sample --transport stdio
+./okf mcp --bundle ./testdata/sample --transport stdio
 ```
 
 #### SSE Transport (HTTP Server-Sent Events)
 Ideal for remote integrations or network-based MCP clients:
 
 ```bash
-./okf server --bundle ./testdata/sample --transport sse --port 8080
+./okf mcp --bundle ./testdata/sample --transport sse --port 8080
 ```
 
 #### Claude Desktop Configuration
 
-To register the OKF MCP server with Claude Desktop, add the server to your `claude_desktop_config.json` (typically located at `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS or `%APPDATA%\Claude\claude_desktop_config.json` on Windows):
+To register the OKF-go MCP server with Claude Desktop, add the server to your `claude_desktop_config.json` (typically located at `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS or `%APPDATA%\Claude\claude_desktop_config.json` on Windows):
 
 ```json
 {
@@ -304,7 +304,7 @@ To register the OKF MCP server with Claude Desktop, add the server to your `clau
     "okf-knowledge": {
       "command": "/Users/abcubed3/okf-go/okf",
       "args": [
-        "server",
+        "mcp",
         "--bundle",
         "/Users/abcubed3/okf-go/testdata/sample"
       ]
@@ -342,26 +342,6 @@ task benchmark
 ```
 
 See [PERFORMANCE.md](PERFORMANCE.md) for full benchmark results, regression analysis with `benchstat`, and CPU/memory profiling instructions.
-
----
-
-## 📂 Project Architecture
-
-```text
-okf-go/
-├── main.go                     # CLI entrypoint and subcommand routing
-├── pkg/
-│   ├── bundle/                 # Core structs (Bundle, Concept)
-│   ├── parser/                 # Bundle traverser and frontmatter Markdown parser
-│   ├── validator/              # Conformance and broken link validation
-│   ├── harvester/              # Metadata extractors (DB, OpenAPI, Proto)
-│   ├── assembly/               # Graph builder and BFS context assembler
-│   ├── server/                 # Model Context Protocol (MCP) Server
-│   └── generator/              # Static HTML developer documentation portal compiler
-├── ideas/                      # Roadmap plans and OKF opportunity outlines
-└── testdata/
-    └── sample/                 # Mock bundle for tests and playground
-```
 
 ---
 
