@@ -86,7 +86,7 @@ Check out this [External Link](https://google.com) which should be ignored.`,
 		Body: "Testing citations.",
 	}
 
-	issues := ValidateBundle(b)
+	issues := ValidateBundle(b, Options{})
 
 	// We expect:
 	// 1. Error on "missing-type" (missing type field)
@@ -150,6 +150,6 @@ func BenchmarkValidateBundle(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = ValidateBundle(bundleObj)
+		_ = ValidateBundle(bundleObj, Options{})
 	}
 }

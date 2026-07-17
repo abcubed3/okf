@@ -96,7 +96,7 @@ func ParseBundleWithOptions(rootPath string, opts ParseOptions) (*bundle.Bundle,
 		}
 
 		// Calculate Concept ID (relative path without .md)
-		conceptID := strings.TrimSuffix(relPath, ".md")
+		conceptID := strings.TrimSuffix(filepath.ToSlash(relPath), ".md")
 		jobs = append(jobs, fileJob{
 			path:      path,
 			relPath:   relPath,

@@ -22,6 +22,7 @@ import (
 	"github.com/abcubed3/okf/pkg/lsp"
 	"github.com/abcubed3/okf/pkg/parser"
 	"github.com/abcubed3/okf/pkg/publish"
+	"github.com/abcubed3/okf/pkg/pull"
 	"github.com/abcubed3/okf/pkg/server"
 	okfsync "github.com/abcubed3/okf/pkg/sync"
 	"github.com/abcubed3/okf/pkg/validator"
@@ -72,6 +73,8 @@ func main() {
 		runMerge(os.Args[2:])
 	case "publish":
 		runPublish(os.Args[2:])
+	case "pull":
+		runPull(os.Args[2:])
 	case "version", "-v", "--version", "-version":
 		printVersion()
 	case "help", "-h", "--help":
@@ -105,6 +108,7 @@ func printUsage() {
 	fmt.Println("  diff <path-a> <path-b>   Compare two OKF bundles for drift")
 	fmt.Println("  merge <path-a> <path-b>  Merge two OKF bundles together")
 	fmt.Println("  publish [path] [flags]   Publish an OKF bundle to the Hub")
+	fmt.Println("  pull <uri> [flags]       Pull an OKF bundle from the Hub")
 	fmt.Println("  version, -v, --version   Print version information")
 	fmt.Println("  help, -h, --help         Display help information")
 }
@@ -143,11 +147,46 @@ func runPublish(args []string) {
 }
 
 
+// runPull handles the pull CLI command
+func runPull(args []string) {
+	hubURI := ""
+	host := "http://localhost:8080"
+	apiKey := os.Getenv("OKF_HUB_API_KEY")
+
+	fs := flag.NewFlagSet("pull", flag.ExitOnError)
+	fs.StringVar(&host, "host", host, "OKF Hub host URL")
+	fs.StringVar(&apiKey, "api-key", apiKey, "OKF Hub API Key (or set OKF_HUB_API_KEY)")
+	fs.Parse(args)
+
+	if fs.NArg() > 0 {
+		hubURI = fs.Arg(0)
+	}
+
+	if hubURI == "" {
+		fmt.Println("Error: A hub:// URI is required. Example: okf pull hub://stripe/api")
+		os.Exit(1)
+	}
+
+	err := pull.PullBundle(hubURI, host, apiKey)
+	if err != nil {
+		fmt.Printf("Error pulling bundle: %v\n", err)
+		os.Exit(1)
+	}
+}
+
 // runLint executes the linting check on a specified target bundle path.
 func runLint(args []string) {
 	bundlePath := "."
-	if len(args) > 0 {
-		bundlePath = args[0]
+	host := "http://localhost:8080"
+	apiKey := os.Getenv("OKF_HUB_API_KEY")
+
+	fs := flag.NewFlagSet("lint", flag.ExitOnError)
+	fs.StringVar(&host, "host", host, "OKF Hub host URL for remote resolution")
+	fs.StringVar(&apiKey, "api-key", apiKey, "OKF Hub API Key for remote resolution")
+	fs.Parse(args)
+
+	if fs.NArg() > 0 {
+		bundlePath = fs.Arg(0)
 	}
 
 	localPath, cleanup, err := parser.ResolvePath(bundlePath)
@@ -171,7 +210,11 @@ func runLint(args []string) {
 		os.Exit(1)
 	}
 
-	issues := validator.ValidateBundle(b)
+	opts := validator.Options{
+		Host:   host,
+		APIKey: apiKey,
+	}
+	issues := validator.ValidateBundle(b, opts)
 
 	errorsCount := 0
 	warningsCount := 0

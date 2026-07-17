@@ -61,6 +61,9 @@ func (p *PostgresProvider) GetTables(ctx context.Context) ([]TableMetadata, erro
 		}
 		tables = append(tables, table)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("table row iteration error: %w", err)
+	}
 
 	return tables, nil
 }
@@ -103,6 +106,9 @@ func (p *PostgresProvider) GetColumns(ctx context.Context, tableName string) ([]
 		col.IsNullable = (isNullableStr == "YES")
 		columns = append(columns, col)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("column row iteration error: %w", err)
+	}
 
 	return columns, nil
 }
@@ -141,6 +147,9 @@ func (p *PostgresProvider) GetForeignKeys(ctx context.Context) ([]ForeignKeyMeta
 			return nil, fmt.Errorf("failed to scan foreign key row: %w", err)
 		}
 		fks = append(fks, fk)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("foreign key row iteration error: %w", err)
 	}
 
 	return fks, nil

@@ -2,14 +2,15 @@
 package generator
 
 import (
+	"io"
 	"encoding/json"
 	"fmt"
 	"html/template"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/abcubed3/okf/pkg/assembly"
 	"github.com/abcubed3/okf/pkg/bundle"
 	"github.com/abcubed3/okf/pkg/export"
 	"github.com/abcubed3/okf/pkg/parser"
@@ -56,6 +57,14 @@ type ConceptIndexEntry struct {
 	Tags []string `json:"tags,omitempty"`
 	// Timestamp is the RFC3339 formatted generation/update time.
 	Timestamp string `json:"timestamp,omitempty"`
+	// Excerpt is a short snippet of the body content for search.
+	Excerpt string `json:"excerpt,omitempty"`
+}
+
+// GraphEdge represents a relationship between two concepts for the visualizer.
+type GraphEdge struct {
+	From string `json:"from"`
+	To   string `json:"to"`
 }
 
 // BundleJSONData matches the client-side JSON format for the entire bundle index.
@@ -73,6 +82,8 @@ type BundleJSONData struct {
 	Index string `json:"index,omitempty"`
 	// Log holds the content of the log.md update log, if available.
 	Log string `json:"log,omitempty"`
+	// Links holds all the edges in the knowledge graph.
+	Links []GraphEdge `json:"links"`
 }
 
 // templateData is the Go struct passed to the HTML template.
@@ -135,10 +146,26 @@ func Generate(bundlePath, outputPath string) error {
 		Log:      logContent,
 	}
 
+	graph := assembly.BuildGraph(b)
+	for fromID, node := range graph.Nodes {
+		for _, toID := range node.OutLinks {
+			jsonData.Links = append(jsonData.Links, GraphEdge{From: fromID, To: toID})
+		}
+	}
+
 	for id, c := range b.Concepts {
 		if c.ParseError != "" {
 			continue
 		}
+		
+		excerpt := c.Body
+		if len(excerpt) > 300 {
+			runes := []rune(excerpt)
+			if len(runes) > 300 {
+				excerpt = string(runes[:297]) + "..."
+			}
+		}
+		
 		jsonData.Concepts[id] = ConceptIndexEntry{
 			ID:          c.ID,
 			Type:        c.Frontmatter.Type,
@@ -147,6 +174,7 @@ func Generate(bundlePath, outputPath string) error {
 			Resource:    c.Frontmatter.Resource,
 			Tags:        c.Frontmatter.Tags,
 			Timestamp:   c.Frontmatter.Timestamp,
+			Excerpt:     excerpt,
 		}
 	}
 

@@ -697,7 +697,19 @@ const HTMLTemplate = `<!DOCTYPE html>
     <script>
         // Parse the injected bundle data
         const bundle = JSON.parse(document.getElementById('okf-bundle-data').textContent);
-        
+
+        /**
+         * escHtml — safely encodes a string for injection into innerHTML.
+         * Use this for ALL user-controlled or bundle-sourced strings placed
+         * inside innerHTML to prevent XSS.
+         */
+        function escHtml(s) {
+            if (s == null) return '';
+            const d = document.createElement('div');
+            d.textContent = String(s);
+            return d.innerHTML;
+        }
+
         // State management
         let activeConceptId = '';
         let visNetwork = null;
@@ -859,13 +871,13 @@ const HTMLTemplate = `<!DOCTYPE html>
                 const title = (c.title || '').toLowerCase();
                 const id = c.id.toLowerCase();
                 const desc = (c.description || '').toLowerCase();
-                const body = (c.body || '').toLowerCase();
+                const excerpt = (c.excerpt || '').toLowerCase();
                 const tags = (c.tags || []).map(t => t.toLowerCase()).join(' ');
 
                 return title.includes(query) ||
                        id.includes(query) ||
                        desc.includes(query) ||
-                       body.includes(query) ||
+                       excerpt.includes(query) ||
                        tags.includes(query);
             });
 
@@ -1094,10 +1106,10 @@ const HTMLTemplate = `<!DOCTYPE html>
                                 const targetAttr = isLocal ? '' : 'target="_blank" rel="noopener noreferrer"';
                                 return (
                                     '<div class="citation-card" style="padding: 1rem; border: 1px solid var(--border-color); border-radius: 10px; background-color: var(--bg-secondary); display: flex; align-items: flex-start; gap: 0.75rem; box-shadow: var(--shadow-sm); transition: var(--transition);">' +
-                                        '<span style="font-weight: 600; color: var(--accent-color); font-size: 0.8rem; padding: 0.15rem 0.45rem; border-radius: 6px; background-color: var(--accent-light); flex-shrink: 0; line-height: 1;">[' + c.number + ']</span>' +
+                                        '<span style="font-weight: 600; color: var(--accent-color); font-size: 0.8rem; padding: 0.15rem 0.45rem; border-radius: 6px; background-color: var(--accent-light); flex-shrink: 0; line-height: 1;">[' + escHtml(c.number) + ']</span>' +
                                         '<div style="display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; flex: 1;">' +
-                                            '<a href="' + c.uri + '" ' + targetAttr + ' style="font-weight: 500; font-size: 0.95rem; text-decoration: none; color: var(--accent-color); overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; line-height: 1.3;">' + c.title + extIcon + '</a>' +
-                                            '<span style="font-size: 0.75rem; color: var(--text-secondary); word-break: break-all; font-family: monospace;">' + displayUri + '</span>' +
+                                            '<a href="' + escHtml(c.uri) + '" ' + targetAttr + ' style="font-weight: 500; font-size: 0.95rem; text-decoration: none; color: var(--accent-color); overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; line-height: 1.3;">' + escHtml(c.title) + extIcon + '</a>' +
+                                            '<span style="font-size: 0.75rem; color: var(--text-secondary); word-break: break-all; font-family: monospace;">' + escHtml(displayUri) + '</span>' +
                                         '</div>' +
                                     '</div>'
                                 );
@@ -1109,8 +1121,8 @@ const HTMLTemplate = `<!DOCTYPE html>
             contentPanel.innerHTML = 
                 '<div class="concept-header">' +
                     '<div class="concept-title-row">' +
-                        '<h1 class="concept-title">' + (concept.title || concept.id) + '</h1>' +
-                        '<span class="badge-type" style="background-color: ' + typeColor + '">' + (concept.type || 'Concept') + '</span>' +
+                        '<h1 class="concept-title">' + escHtml(concept.title || concept.id) + '</h1>' +
+                        '<span class="badge-type" style="background-color: ' + escHtml(typeColor) + '">' + escHtml(concept.type || 'Concept') + '</span>' +
                     '</div>' +
                     '<div class="concept-meta">' +
                         resourceBlock +
@@ -1166,61 +1178,27 @@ const HTMLTemplate = `<!DOCTYPE html>
                     }
                 });
 
-                // Find outgoing links in body to add edges
-                const markdownLinkRegex = /\[[^\]]*\]\(([^)]+)\)/g;
-                let match;
-                while ((match = markdownLinkRegex.exec(c.body || '')) !== null) {
-                    const targetUrl = match[1];
-                    // Skip external or anchors
-                    if (targetUrl.startsWith('http') || targetUrl.startsWith('mailto:') || targetUrl.startsWith('#')) {
-                        continue;
-                    }
 
-                    // Resolve target concept
-                    // Strip anchor
-                    let targetPath = targetUrl.split('#')[0].replace(/\.md$/, '');
-                    
-                    // Try direct lookup or relative
-                    let targetId = '';
-                    if (bundle.concepts[targetPath]) {
-                        targetId = targetPath;
-                    } else {
-                        // Attempt relative resolution
-                        const parts = c.id.split('/');
-                        parts.pop();
-                        const hrefParts = targetPath.split('/');
-                        const resolvedParts = [...parts];
-                        for (const part of hrefParts) {
-                            if (part === '..') {
-                                resolvedParts.pop();
-                            } else if (part !== '.' && part !== '') {
-                                resolvedParts.push(part);
-                            }
-                        }
-                        const resolvedId = resolvedParts.join('/');
-                        if (bundle.concepts[resolvedId]) {
-                            targetId = resolvedId;
-                        }
-                    }
-
-                    if (targetId && targetId !== c.id) {
-                        const edgeKey = c.id + '->' + targetId;
-                        if (!edgeTracker.has(edgeKey)) {
-                            edgeTracker.add(edgeKey);
-                            edges.push({
-                                from: c.id,
-                                to: targetId,
-                                arrows: 'to',
-                                color: {
-                                    color: edgeColor,
-                                    highlight: '#3b82f6'
-                                },
-                                width: 1.5
-                            });
-                        }
-                    }
-                }
             });
+
+            if (bundle.links) {
+                bundle.links.forEach(link => {
+                    const edgeKey = link.from + '->' + link.to;
+                    if (!edgeTracker.has(edgeKey)) {
+                        edgeTracker.add(edgeKey);
+                        edges.push({
+                            from: link.from,
+                            to: link.to,
+                            arrows: 'to',
+                            color: {
+                                color: edgeColor,
+                                highlight: '#3b82f6'
+                            },
+                            width: 1.5
+                        });
+                    }
+                });
+            }
 
             const data = {
                 nodes: new vis.DataSet(nodes),

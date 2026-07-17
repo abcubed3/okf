@@ -64,6 +64,7 @@ func AssembleContext(g *ConceptGraph, startID string, opts AssemblyOptions) (str
 
 	var queue []queueItem
 	queue = append(queue, queueItem{id: startID, depth: 0})
+	head := 0
 
 	visited := make(map[string]bool)
 	visited[startID] = true
@@ -72,9 +73,9 @@ func AssembleContext(g *ConceptGraph, startID string, opts AssemblyOptions) (str
 	charCount := 0
 	tokenCount := 0
 
-	for len(queue) > 0 {
-		item := queue[0]
-		queue = queue[1:]
+	for head < len(queue) {
+		item := queue[head]
+		head++
 
 		node := g.Nodes[item.id]
 		concept := node.Concept
@@ -107,19 +108,7 @@ func AssembleContext(g *ConceptGraph, startID string, opts AssemblyOptions) (str
 			case DirectionBidirectional:
 				// Combine outbound and inbound links
 				neighbors = append(neighbors, node.OutLinks...)
-				for _, inID := range node.InLinks {
-					// Avoid duplicates in the neighbors slice
-					found := false
-					for _, n := range neighbors {
-						if n == inID {
-							found = true
-							break
-						}
-					}
-					if !found {
-						neighbors = append(neighbors, inID)
-					}
-				}
+				neighbors = append(neighbors, node.InLinks...)
 			default:
 				neighbors = node.OutLinks
 			}
@@ -201,7 +190,7 @@ func formatSingleConcept(c *bundle.Concept, format string) string {
 	}
 	buf.WriteString("  </metadata>\n")
 	buf.WriteString("  <body>\n")
-	buf.WriteString(c.Body)
+	buf.WriteString(escapeXML(c.Body))
 	buf.WriteString("\n  </body>\n")
 	buf.WriteString("</concept>\n")
 	return buf.String()

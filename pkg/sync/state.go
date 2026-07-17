@@ -48,8 +48,8 @@ func (sm *StateManager) Load() error {
 }
 
 func (sm *StateManager) Save() error {
-	sm.mu.RLock()
-	defer sm.mu.RUnlock()
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
 
 	data, err := json.MarshalIndent(sm.state, "", "  ")
 	if err != nil {

@@ -1,6 +1,10 @@
+// Package lsp implements an OKF Language Server Protocol (LSP) server.
+// It provides real-time diagnostics for OKF concept markdown files as they
+// are edited inside any LSP-compatible editor (VS Code, Neovim, etc.).
 package lsp
 
 import (
+	"net/url"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -13,100 +17,127 @@ import (
 	"github.com/tliron/glsp/server"
 )
 
-var (
-	handler       protocol.Handler
+// Server holds all LSP server state. Each field is safe for concurrent access
+// via the embedded mutex. Using a struct eliminates the package-level global
+// variable anti-pattern and makes the server testable in isolation.
+type Server struct {
+	mu            sync.RWMutex
 	workspaceRoot string
 	activeBundle  *bundle.Bundle
-	bundleMutex   sync.RWMutex
-)
+}
 
-func init() {
-	handler = protocol.Handler{
-		Initialize:            initialize,
-		Initialized:           initialized,
-		Shutdown:              shutdown,
-		SetTrace:              setTrace,
-		TextDocumentDidOpen:    textDocumentDidOpen,
-		TextDocumentDidChange:  textDocumentDidChange,
-		TextDocumentDidSave:    textDocumentDidSave,
-		TextDocumentDidClose:   textDocumentDidClose,
-		TextDocumentHover:      textDocumentHover,
-		TextDocumentDefinition: textDocumentDefinition,
+// NewServer allocates a new LSP Server instance.
+func NewServer() *Server {
+	return &Server{}
+}
+
+// Run starts the LSP server on Standard I/O. This call blocks until the editor
+// closes the connection.
+func Run() {
+	s := NewServer()
+	handler := s.buildHandler()
+	srv := server.NewServer(handler, "okf-lsp", true)
+	srv.RunStdio()
+}
+
+// buildHandler constructs the protocol.Handler, binding each LSP method to a
+// method on this Server instance (avoiding package-level globals).
+func (s *Server) buildHandler() *protocol.Handler {
+	return &protocol.Handler{
+		Initialize:             s.initialize,
+		Initialized:            s.initialized,
+		Shutdown:               shutdown,
+		SetTrace:               setTrace,
+		TextDocumentDidOpen:    s.textDocumentDidOpen,
+		TextDocumentDidChange:  s.textDocumentDidChange,
+		TextDocumentDidSave:    s.textDocumentDidSave,
+		TextDocumentDidClose:   s.textDocumentDidClose,
+		// Hover and Definition are not yet implemented; we omit them from
+		// capabilities so the editor does not wait for a response that never comes.
 	}
 }
 
-// Run starts the LSP server on Standard I/O
-func Run() {
-	server := server.NewServer(&handler, "okf-lsp", true)
-	server.RunStdio()
-}
+// initialize handles the LSP 'initialize' request.
+// It advertises the server capabilities and captures the workspace root URI.
+func (s *Server) initialize(context *glsp.Context, params *protocol.InitializeParams) (any, error) {
+	capabilities := protocol.ServerCapabilities{
+		// Full document sync: the client sends the entire content on every change.
+		TextDocumentSync: protocol.TextDocumentSyncKindFull,
+		// Hover and Definition are intentionally NOT advertised until they are
+		// implemented — advertising unimplemented capabilities leaves the editor
+		// spinner hanging indefinitely.
+	}
 
-func initialize(context *glsp.Context, params *protocol.InitializeParams) (any, error) {
-	capabilities := handler.CreateServerCapabilities()
-
-	// We support full text document sync for now
-	capabilities.TextDocumentSync = protocol.TextDocumentSyncKindFull
-	capabilities.HoverProvider = true
-	capabilities.DefinitionProvider = true
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	if params.RootURI != nil {
-		workspaceRoot = strings.TrimPrefix(*params.RootURI, "file://")
+		s.workspaceRoot = uriToPath(*params.RootURI)
 	} else if params.RootPath != nil {
-		workspaceRoot = *params.RootPath
+		s.workspaceRoot = *params.RootPath
 	}
 
 	return protocol.InitializeResult{
 		Capabilities: capabilities,
 		ServerInfo: &protocol.InitializeResultServerInfo{
 			Name:    "okf-lsp",
-			Version: func(s string) *string { return &s }("0.1.0"),
+			Version: func(v string) *string { return &v }("0.1.0"),
 		},
 	}, nil
 }
 
-func initialized(context *glsp.Context, params *protocol.InitializedParams) error {
-	bundleMutex.Lock()
-	defer bundleMutex.Unlock()
-	if workspaceRoot != "" {
-		b, err := parser.ParseBundle(workspaceRoot)
-		if err == nil {
-			activeBundle = b
+// initialized handles the LSP 'initialized' notification sent after initialize completes.
+// It performs an initial bundle parse so diagnostics are ready from the moment the editor opens.
+func (s *Server) initialized(context *glsp.Context, params *protocol.InitializedParams) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.workspaceRoot != "" {
+		if b, err := parser.ParseBundle(s.workspaceRoot); err == nil {
+			s.activeBundle = b
 		}
 	}
 	return nil
 }
 
+// shutdown handles the LSP 'shutdown' request.
 func shutdown(context *glsp.Context) error {
 	protocol.SetTraceValue(protocol.TraceValueOff)
 	return nil
 }
 
+// setTrace handles the LSP '$/setTrace' notification.
 func setTrace(context *glsp.Context, params *protocol.SetTraceParams) error {
 	protocol.SetTraceValue(params.Value)
 	return nil
 }
 
-func textDocumentDidOpen(context *glsp.Context, params *protocol.DidOpenTextDocumentParams) error {
-	return parseAndValidate(context, params.TextDocument.URI, params.TextDocument.Text)
+func (s *Server) textDocumentDidOpen(context *glsp.Context, params *protocol.DidOpenTextDocumentParams) error {
+	return s.parseAndValidate(context, params.TextDocument.URI, params.TextDocument.Text)
 }
 
-func textDocumentDidChange(context *glsp.Context, params *protocol.DidChangeTextDocumentParams) error {
-	if len(params.ContentChanges) > 0 {
-		text := params.ContentChanges[0].(protocol.TextDocumentContentChangeEventWhole).Text
-		return parseAndValidate(context, params.TextDocument.URI, text)
+func (s *Server) textDocumentDidChange(context *glsp.Context, params *protocol.DidChangeTextDocumentParams) error {
+	if len(params.ContentChanges) == 0 {
+		return nil
 	}
-	return nil
+	// The server requests TextDocumentSyncKindFull, so the first change always
+	// contains the complete document text.
+	change, ok := params.ContentChanges[0].(protocol.TextDocumentContentChangeEventWhole)
+	if !ok {
+		return nil
+	}
+	return s.parseAndValidate(context, params.TextDocument.URI, change.Text)
 }
 
-func textDocumentDidSave(context *glsp.Context, params *protocol.DidSaveTextDocumentParams) error {
+func (s *Server) textDocumentDidSave(context *glsp.Context, params *protocol.DidSaveTextDocumentParams) error {
 	if params.Text != nil {
-		return parseAndValidate(context, params.TextDocument.URI, *params.Text)
+		return s.parseAndValidate(context, params.TextDocument.URI, *params.Text)
 	}
-	// If text is not provided, we could read from disk, but for full sync it's usually tracked.
 	return nil
 }
 
-func textDocumentDidClose(context *glsp.Context, params *protocol.DidCloseTextDocumentParams) error {
+func (s *Server) textDocumentDidClose(context *glsp.Context, params *protocol.DidCloseTextDocumentParams) error {
+	// Clear diagnostics for the closed file so stale errors don't persist.
 	context.Notify(protocol.ServerTextDocumentPublishDiagnostics, protocol.PublishDiagnosticsParams{
 		URI:         params.TextDocument.URI,
 		Diagnostics: []protocol.Diagnostic{},
@@ -114,13 +145,24 @@ func textDocumentDidClose(context *glsp.Context, params *protocol.DidCloseTextDo
 	return nil
 }
 
-func parseAndValidate(context *glsp.Context, uri string, content string) error {
-	if workspaceRoot == "" {
+// parseAndValidate parses the given concept file content, updates the in-memory
+// bundle, validates the single concept, and publishes diagnostics to the editor.
+func (s *Server) parseAndValidate(context *glsp.Context, uri string, content string) error {
+	s.mu.RLock()
+	root := s.workspaceRoot
+	s.mu.RUnlock()
+
+	if root == "" {
 		return nil
 	}
 
-	relPath := strings.TrimPrefix(strings.TrimPrefix(uri, "file://"), workspaceRoot+"/")
-	conceptID := strings.TrimSuffix(relPath, ".md")
+	filePath := uriToPath(uri)
+	relPath, err := filepath.Rel(root, filePath)
+	if err != nil {
+		// Cannot determine relative path; skip
+		return nil
+	}
+	conceptID := strings.TrimSuffix(filepath.ToSlash(relPath), ".md")
 
 	c, err := parser.ParseConceptReader(strings.NewReader(content), relPath, conceptID)
 	if err != nil {
@@ -131,19 +173,19 @@ func parseAndValidate(context *glsp.Context, uri string, content string) error {
 		}
 	}
 
-	bundleMutex.Lock()
-	if activeBundle == nil {
-		activeBundle = bundle.NewBundle(workspaceRoot)
+	s.mu.Lock()
+	if s.activeBundle == nil {
+		s.activeBundle = bundle.NewBundle(root)
 	}
-	activeBundle.Concepts[conceptID] = c
-	b := activeBundle
-	bundleMutex.Unlock()
+	s.activeBundle.Concepts[conceptID] = c
+	// Snapshot the bundle pointer so we can release the lock before validating.
+	b := s.activeBundle
+	s.mu.Unlock()
 
-	issues := validator.ValidateBundle(b)
+	issues := validator.ValidateConcept(c, b, validator.Options{}, make(map[string]map[string]bool))
 
-	diagnosticsByURI := make(map[string][]protocol.Diagnostic)
+	var diagnostics []protocol.Diagnostic
 	for _, issue := range issues {
-		issueURI := "file://" + filepath.Join(workspaceRoot, issue.Path)
 		severity := protocol.DiagnosticSeverityError
 		if issue.Severity == validator.SeverityWarning {
 			severity = protocol.DiagnosticSeverityWarning
@@ -158,29 +200,40 @@ func parseAndValidate(context *glsp.Context, uri string, content string) error {
 			Source:   func(s string) *string { return &s }("okf"),
 			Message:  issue.Message,
 		}
-		diagnosticsByURI[issueURI] = append(diagnosticsByURI[issueURI], diagnostic)
+		diagnostics = append(diagnostics, diagnostic)
 	}
 
-	for u, diagnostics := range diagnosticsByURI {
-		context.Notify(protocol.ServerTextDocumentPublishDiagnostics, protocol.PublishDiagnosticsParams{
-			URI:         u,
-			Diagnostics: diagnostics,
-		})
+	if diagnostics == nil {
+		diagnostics = []protocol.Diagnostic{}
 	}
+
+	context.Notify(protocol.ServerTextDocumentPublishDiagnostics, protocol.PublishDiagnosticsParams{
+		URI:         uri,
+		Diagnostics: diagnostics,
+	})
 
 	return nil
 }
 
-func textDocumentHover(context *glsp.Context, params *protocol.HoverParams) (*protocol.Hover, error) {
-	// A real implementation would parse the line content and find the concept ID under the cursor.
-	// For simplicity, we just return a placeholder or look up if we know the hovered word.
-	// This requires maintaining the text content to extract the word, which we omit for brevity.
-	// As a placeholder, we'll return a simple hover if the user hovers over a file we know.
-	return nil, nil
+// uriToPath converts an LSP file:// URI to an OS filesystem path.
+// It handles both file:// (2 slashes) and file:/// (3 slashes) forms and
+// percent-decodes any escaped characters (e.g. spaces as %20).
+func uriToPath(uri string) string {
+	u, err := url.Parse(uri)
+	if err != nil {
+		// Fall back to naive string trimming if URL parsing fails.
+		path := strings.TrimPrefix(uri, "file://")
+		return path
+	}
+	return u.Path
 }
 
-func textDocumentDefinition(context *glsp.Context, params *protocol.DefinitionParams) (any, error) {
-	// A real implementation would extract the concept link under the cursor.
-	// For simplicity in this demo, we return nil if no link is found.
-	return nil, nil
+// pathToURI converts an OS filesystem path to an LSP file:// URI.
+func pathToURI(path string) string {
+	// filepath.ToSlash ensures forward slashes on all platforms.
+	slashed := filepath.ToSlash(path)
+	if !strings.HasPrefix(slashed, "/") {
+		slashed = "/" + slashed
+	}
+	return "file://" + slashed
 }

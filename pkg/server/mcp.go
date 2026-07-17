@@ -33,8 +33,8 @@ type Server struct {
 	bundle        *bundle.Bundle
 	// graph is the built relationship graph of all concepts.
 	graph         *assembly.ConceptGraph
-	// conceptTokens caches the token sets for each concept to speed up searches.
-	conceptTokens map[string]map[string]bool
+	// searchTexts caches the lowercase full text for each concept to speed up searches.
+	searchTexts   map[string]string
 }
 
 // NewMCPServer parses the OKF bundle and initializes the MCP Server.
@@ -344,9 +344,9 @@ func (s *Server) reloadBundle() {
 	fmt.Fprintln(os.Stderr, "Successfully reloaded OKF bundle in memory!")
 }
 
-// rebuildSearchIndex builds search token maps to perform fast full-text querying.
+// rebuildSearchIndex builds lowercase text caches to perform fast full-text querying.
 func (s *Server) rebuildSearchIndex() {
-	conceptTokens := make(map[string]map[string]bool)
+	searchTexts := make(map[string]string)
 	for id, c := range s.bundle.Concepts {
 		var builder strings.Builder
 		builder.WriteString(id)
@@ -361,14 +361,9 @@ func (s *Server) rebuildSearchIndex() {
 			builder.WriteString(tag)
 		}
 
-		tokens := tokenize(builder.String())
-		tokenSet := make(map[string]bool)
-		for _, token := range tokens {
-			tokenSet[token] = true
-		}
-		conceptTokens[id] = tokenSet
+		searchTexts[id] = strings.ToLower(builder.String())
 	}
-	s.conceptTokens = conceptTokens
+	s.searchTexts = searchTexts
 }
 
 // tokenize splits a text string into lowercase alphanumeric words.
@@ -484,19 +479,12 @@ func (s *Server) handleSearchConcepts(ctx context.Context, req *mcp.CallToolRequ
 			}
 		}
 
-		// Perform high-performance inverted index check
+		// Perform high-performance text search
 		if len(qTokens) > 0 {
 			matchAll := true
-			tokensSet := s.conceptTokens[id]
+			textToSearch := s.searchTexts[id]
 			for _, qTok := range qTokens {
-				found := false
-				for tok := range tokensSet {
-					if strings.Contains(tok, qTok) {
-						found = true
-						break
-					}
-				}
-				if !found {
+				if !strings.Contains(textToSearch, qTok) {
 					matchAll = false
 					break
 				}

@@ -80,8 +80,14 @@ func (c *GoogleDriveConnector) Initialize(ctx context.Context, cfg *Config) erro
 
 		tok, err := tokenFromFile(tokenFile)
 		if err != nil {
-			tok = getTokenFromWeb(oauthConfig)
-			saveToken(tokenFile, tok)
+			tok, err = getTokenFromWeb(oauthConfig)
+			if err != nil {
+				return fmt.Errorf("google_drive OAuth authorization failed: %w", err)
+			}
+			if err := saveToken(tokenFile, tok); err != nil {
+				// Non-fatal: token caching failure shouldn't prevent the session from working.
+				log.Printf("[google_drive] Warning: failed to cache OAuth token to %s: %v", tokenFile, err)
+			}
 		}
 
 		client := oauthConfig.Client(ctx, tok)
@@ -98,44 +104,47 @@ func (c *GoogleDriveConnector) Initialize(ctx context.Context, cfg *Config) erro
 	return nil
 }
 
-func (c *GoogleDriveConnector) Push(ctx context.Context, concept *bundle.Concept) error {
+func (c *GoogleDriveConnector) Push(ctx context.Context, concepts []*bundle.Concept) error {
 	if c.config == nil || c.srv == nil {
 		return nil // Not configured
 	}
 
-	extID := c.state.GetExternalID(concept.ID, c.Name())
-	content := concept.Body
-	title := concept.Frontmatter.Title
-	if title == "" {
-		title = concept.ID
-	}
+	for _, concept := range concepts {
+		extID := c.state.GetExternalID(concept.ID, c.Name())
+		content := concept.Body
+		title := concept.Frontmatter.Title
+		if title == "" {
+			title = concept.ID
+		}
 
-	if extID != "" {
-		// Update existing file
-		log.Printf("[google_drive] Updating concept %s (ID: %s) on Google Drive...", concept.ID, extID)
+		if extID != "" {
+			// Update existing file
+			log.Printf("[google_drive] Updating concept %s (ID: %s) on Google Drive...", concept.ID, extID)
+			f := &drive.File{
+				Name: title,
+			}
+			_, err := c.srv.Files.Update(extID, f).Media(strings.NewReader(content)).Context(ctx).Do()
+			if err != nil {
+				log.Printf("failed to update file in drive: %v", err)
+			}
+			continue
+		}
+
+		log.Printf("[google_drive] Pushing new concept %s (%s)...", concept.ID, title)
 		f := &drive.File{
-			Name: title,
+			Name:     title,
+			MimeType: "application/vnd.google-apps.document", // Convert to Google Doc
+			Parents:  []string{c.config.FolderID},
 		}
-		_, err := c.srv.Files.Update(extID, f).Media(strings.NewReader(content)).Context(ctx).Do()
+
+		res, err := c.srv.Files.Create(f).Media(strings.NewReader(content)).Context(ctx).Do()
 		if err != nil {
-			return fmt.Errorf("failed to update file in drive: %w", err)
+			log.Printf("failed to create file in drive: %v", err)
+			continue
 		}
-		return nil
-	}
 
-	log.Printf("[google_drive] Pushing new concept %s (%s)...", concept.ID, title)
-	f := &drive.File{
-		Name:     title,
-		MimeType: "application/vnd.google-apps.document", // Convert to Google Doc
-		Parents:  []string{c.config.FolderID},
+		c.state.SetExternalID(concept.ID, c.Name(), res.Id)
 	}
-
-	res, err := c.srv.Files.Create(f).Media(strings.NewReader(content)).Context(ctx).Do()
-	if err != nil {
-		return fmt.Errorf("failed to create file in drive: %w", err)
-	}
-
-	c.state.SetExternalID(concept.ID, c.Name(), res.Id)
 	return nil
 }
 
@@ -178,13 +187,15 @@ func (c *GoogleDriveConnector) Pull(ctx context.Context) ([]*bundle.Concept, err
 	return nil, nil
 }
 
-// Request a token from the web, using a local callback server.
-func getTokenFromWeb(config *oauth2.Config) *oauth2.Token {
+// getTokenFromWeb requests a token from the web using a local OAuth2 callback server.
+// Returns the token or an error — never calls log.Fatal.
+func getTokenFromWeb(config *oauth2.Config) (*oauth2.Token, error) {
 	config.RedirectURL = "http://localhost:8080/"
 	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline, oauth2.SetAuthURLParam("prompt", "select_account"))
 	fmt.Printf("\nGo to the following link in your browser to authorize okf:\n\n%v\n\n", authURL)
 
-	codeCh := make(chan string)
+	codeCh := make(chan string, 1)
+	errCh := make(chan error, 1)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		code := r.URL.Query().Get("code")
@@ -201,27 +212,35 @@ func getTokenFromWeb(config *oauth2.Config) *oauth2.Token {
 
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Failed to start local server: %v", err)
+			errCh <- fmt.Errorf("failed to start local OAuth callback server on :8080: %w", err)
 		}
 	}()
 
 	fmt.Println("Waiting for authorization code on http://localhost:8080/...")
-	authCode := <-codeCh
 
-	srv.Shutdown(context.Background())
+	var authCode string
+	select {
+	case authCode = <-codeCh:
+	case err := <-errCh:
+		return nil, err
+	}
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = srv.Shutdown(shutdownCtx)
 
 	if authCode == "" {
-		log.Fatalf("Failed to get authorization code")
+		return nil, fmt.Errorf("OAuth authorization failed: no code received from browser")
 	}
 
-	tok, err := config.Exchange(context.TODO(), authCode)
+	tok, err := config.Exchange(context.Background(), authCode)
 	if err != nil {
-		log.Fatalf("Unable to retrieve token from web: %v", err)
+		return nil, fmt.Errorf("unable to retrieve token from web: %w", err)
 	}
-	return tok
+	return tok, nil
 }
 
-// Retrieves a token from a local file.
+// tokenFromFile retrieves a token from a local file.
 func tokenFromFile(file string) (*oauth2.Token, error) {
 	f, err := os.Open(file)
 	if err != nil {
@@ -233,13 +252,13 @@ func tokenFromFile(file string) (*oauth2.Token, error) {
 	return tok, err
 }
 
-// Saves a token to a file path.
-func saveToken(path string, token *oauth2.Token) {
+// saveToken saves a token to a file path. Returns an error instead of calling log.Fatal.
+func saveToken(path string, token *oauth2.Token) error {
 	fmt.Printf("Saving credential file to: %s\n", path)
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
-		log.Fatalf("Unable to cache oauth token: %v", err)
+		return fmt.Errorf("unable to cache oauth token: %w", err)
 	}
 	defer f.Close()
-	json.NewEncoder(f).Encode(token)
+	return json.NewEncoder(f).Encode(token)
 }

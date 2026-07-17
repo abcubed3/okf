@@ -31,16 +31,18 @@ func (c *NotionConnector) Initialize(ctx context.Context, cfg *Config) error {
 	return nil
 }
 
-func (c *NotionConnector) Push(ctx context.Context, concept *bundle.Concept) error {
+func (c *NotionConnector) Push(ctx context.Context, concepts []*bundle.Concept) error {
 	if c.config == nil {
 		return nil
 	}
-	extID := c.state.GetExternalID(concept.ID, c.Name())
-	if extID != "" {
-		return nil
+	for _, concept := range concepts {
+		extID := c.state.GetExternalID(concept.ID, c.Name())
+		if extID != "" {
+			continue
+		}
+		log.Printf("[notion] Pushing concept %s...", concept.ID)
+		c.state.SetExternalID(concept.ID, c.Name(), fmt.Sprintf("notion-%s", concept.ID))
 	}
-	log.Printf("[notion] Pushing concept %s...", concept.ID)
-	c.state.SetExternalID(concept.ID, c.Name(), fmt.Sprintf("notion-%s", concept.ID))
 	return nil
 }
 

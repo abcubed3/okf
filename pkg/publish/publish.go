@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/abcubed3/okf/pkg/parser"
 )
@@ -79,7 +82,7 @@ func PublishBundle(bundlePath, host, apiKey string) error {
 		return fmt.Errorf("failed to serialize payload: %w", err)
 	}
 
-	// 4. Send HTTP POST
+	// 4. Send HTTP POST with a 30-second timeout to prevent infinite hangs.
 	url := fmt.Sprintf("%s/api/bundles", host)
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(data))
 	if err != nil {
@@ -89,7 +92,7 @@ func PublishBundle(bundlePath, host, apiKey string) error {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 
-	client := &http.Client{}
+	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("network error during publish: %w", err)
@@ -97,6 +100,10 @@ func PublishBundle(bundlePath, host, apiKey string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		if len(body) > 0 {
+			return fmt.Errorf("server returned error %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		}
 		return fmt.Errorf("server returned error code: %d", resp.StatusCode)
 	}
 

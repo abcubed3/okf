@@ -4,6 +4,10 @@ The **Open Knowledge Format (OKF)** is a vendor-neutral, lightweight specificati
 
 By representing knowledge as a directory of Markdown files with structured YAML frontmatter, OKF bridges the gap between structured metadata repositories and unstructured text documentation, serving as an ideal substrate for **AI agents**, **Retrieval-Augmented Generation (RAG)** pipelines, and the **Model Context Protocol (MCP)**.
 
+## 📄 Knowledge Format Specification
+
+![OKF Concept Document Structure](okf_concept_visual.jpg)
+
 The **Open Knowledge Format (OKF)** is an open, vendor-neutral specification developed by Google Cloud for representing structured metadata as plain Markdown files with YAML frontmatter. For the full format specification, conventions, schema details, and reference examples, see the official [Google Cloud OKF Specification](https://github.com/GoogleCloudPlatform/knowledge-catalog).
 
 The **OKF-go** provides a high-performance suite of utilities to validate bundles, harvest metadata from databases and APIs, assemble context for Large Language Models (LLMs), and run an MCP Server.

@@ -57,7 +57,20 @@ func (c *GitConnector) Initialize(ctx context.Context, cfg *Config) error {
 		if err != nil {
 			return fmt.Errorf("failed to load private key file %s: %w", c.config.PrivateKeyPath, err)
 		}
-		sshAuth.HostKeyCallback = ssh.InsecureIgnoreHostKey()
+
+		if c.config.InsecureSkipVerify {
+			// Only allowed when user has explicitly opted in via config.
+			log.Printf("[git] WARNING: SSH host key verification is disabled (insecure_skip_verify=true). This is a security risk.")
+			sshAuth.HostKeyCallback = ssh.InsecureIgnoreHostKey() //nolint:gosec
+		} else {
+			// Use the system's known_hosts file for host key verification.
+			knownHostsPath := filepath.Join(os.Getenv("HOME"), ".ssh", "known_hosts")
+			hostKeyCallback, err := gitssh.NewKnownHostsCallback(knownHostsPath)
+			if err != nil {
+				return fmt.Errorf("failed to load known_hosts from %s (use insecure_skip_verify: true to bypass): %w", knownHostsPath, err)
+			}
+			sshAuth.HostKeyCallback = hostKeyCallback
+		}
 		c.auth = sshAuth
 	} else if c.config.Token != "" {
 		c.auth = &githttp.BasicAuth{
@@ -113,12 +126,12 @@ func (c *GitConnector) Initialize(ctx context.Context, cfg *Config) error {
 	return nil
 }
 
-func (c *GitConnector) Push(ctx context.Context, concept *bundle.Concept) error {
+func (c *GitConnector) Push(ctx context.Context, concepts []*bundle.Concept) error {
 	if c.config == nil || c.repo == nil {
 		return nil
 	}
 
-	log.Printf("[git] Preparing to push concept %s...", concept.ID)
+	log.Printf("[git] Preparing to push %d concepts...", len(concepts))
 
 	// Determine output directories
 	subpath := c.config.Path
@@ -126,55 +139,63 @@ func (c *GitConnector) Push(ctx context.Context, concept *bundle.Concept) error 
 		subpath = "concepts"
 	}
 
-	targetPath := filepath.Join(c.clonePath, subpath, concept.Path)
-	parentDir := filepath.Dir(targetPath)
-	if err := os.MkdirAll(parentDir, 0755); err != nil {
-		return fmt.Errorf("failed to create directory in git repository %q: %w", parentDir, err)
-	}
-
-	// Format concept frontmatter and body
-	fmBytes, err := yaml.Marshal(concept.Frontmatter)
-	if err != nil {
-		return fmt.Errorf("failed to marshal YAML frontmatter: %w", err)
-	}
-
-	var builder strings.Builder
-	builder.WriteString("---\n")
-	builder.Write(fmBytes)
-	builder.WriteString("---\n")
-	if concept.Body != "" {
-		if !strings.HasPrefix(concept.Body, "\n") {
-			builder.WriteString("\n")
-		}
-		builder.WriteString(concept.Body)
-		if !strings.HasSuffix(concept.Body, "\n") {
-			builder.WriteString("\n")
-		}
-	}
-
-	// Write file to the cloned git directory
-	if err := os.WriteFile(targetPath, []byte(builder.String()), 0644); err != nil {
-		return fmt.Errorf("failed to write concept file to repository: %w", err)
-	}
-
-	// Stage the file
 	w, err := c.repo.Worktree()
 	if err != nil {
 		return err
 	}
 
-	gitRelPath, err := filepath.Rel(c.clonePath, targetPath)
-	if err != nil {
-		return err
+	var stagedCount int
+	for _, concept := range concepts {
+		targetPath := filepath.Join(c.clonePath, subpath, concept.Path)
+		parentDir := filepath.Dir(targetPath)
+		if err := os.MkdirAll(parentDir, 0755); err != nil {
+			return fmt.Errorf("failed to create directory in git repository %q: %w", parentDir, err)
+		}
+
+		// Format concept frontmatter and body
+		fmBytes, err := yaml.Marshal(concept.Frontmatter)
+		if err != nil {
+			log.Printf("failed to marshal YAML frontmatter for %s: %v", concept.ID, err)
+			continue
+		}
+
+		var builder strings.Builder
+		builder.WriteString("---\n")
+		builder.Write(fmBytes)
+		builder.WriteString("---\n")
+		if concept.Body != "" {
+			if !strings.HasPrefix(concept.Body, "\n") {
+				builder.WriteString("\n")
+			}
+			builder.WriteString(concept.Body)
+			if !strings.HasSuffix(concept.Body, "\n") {
+				builder.WriteString("\n")
+			}
+		}
+
+		// Write file to the cloned git directory
+		if err := os.WriteFile(targetPath, []byte(builder.String()), 0644); err != nil {
+			return fmt.Errorf("failed to write concept file to repository: %w", err)
+		}
+
+		gitRelPath, err := filepath.Rel(c.clonePath, targetPath)
+		if err != nil {
+			return err
+		}
+
+		_, err = w.Add(gitRelPath)
+		if err != nil {
+			return fmt.Errorf("failed to stage file in git repo: %w", err)
+		}
+		stagedCount++
 	}
 
-	_, err = w.Add(gitRelPath)
-	if err != nil {
-		return fmt.Errorf("failed to stage file in git repo: %w", err)
+	if stagedCount == 0 {
+		return nil
 	}
 
 	// Commit
-	commitMsg := fmt.Sprintf("okf sync: update concept %s", concept.ID)
+	commitMsg := fmt.Sprintf("okf sync: update %d concepts", stagedCount)
 	_, err = w.Commit(commitMsg, &git.CommitOptions{
 		Author: &object.Signature{
 			Name:  "OKF Sync Engine",
@@ -187,7 +208,7 @@ func (c *GitConnector) Push(ctx context.Context, concept *bundle.Concept) error 
 	}
 
 	if err == git.ErrEmptyCommit {
-		log.Printf("[git] Concept %s has no modifications. Skipping push.", concept.ID)
+		log.Printf("[git] No modifications. Skipping push.")
 		return nil
 	}
 
@@ -198,11 +219,10 @@ func (c *GitConnector) Push(ctx context.Context, concept *bundle.Concept) error 
 		Auth:       c.auth,
 	})
 	if err != nil && err != git.NoErrAlreadyUpToDate {
-		return fmt.Errorf("failed to push changes to remote git: %w", err)
+		return fmt.Errorf("failed to push to remote: %w", err)
 	}
 
-	log.Printf("[git] Successfully pushed concept %s!", concept.ID)
-	c.state.SetExternalID(concept.ID, c.Name(), fmt.Sprintf("git-%s", concept.ID))
+	log.Printf("[git] Push complete.")
 	return nil
 }
 

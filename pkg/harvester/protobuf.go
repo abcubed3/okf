@@ -182,7 +182,10 @@ func (h *ProtobufHarvester) buildMessageConcept(pkg string, fd linker.File, msg 
 		shortDesc = fmt.Sprintf("Protobuf message definition for %s.", msgName)
 	}
 	if len(shortDesc) > 100 {
-		shortDesc = shortDesc[:97] + "..."
+		runes := []rune(shortDesc)
+		if len(runes) > 100 {
+			shortDesc = string(runes[:97]) + "..."
+		}
 	}
 	shortDesc = strings.ReplaceAll(shortDesc, "\n", " ")
 
@@ -248,7 +251,10 @@ func (h *ProtobufHarvester) buildServiceConcept(pkg string, fd linker.File, srv 
 		shortDesc = fmt.Sprintf("Protobuf service definition for %s.", srvName)
 	}
 	if len(shortDesc) > 100 {
-		shortDesc = shortDesc[:97] + "..."
+		runes := []rune(shortDesc)
+		if len(runes) > 100 {
+			shortDesc = string(runes[:97]) + "..."
+		}
 	}
 	shortDesc = strings.ReplaceAll(shortDesc, "\n", " ")
 

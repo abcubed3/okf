@@ -64,6 +64,9 @@ func (p *SpannerProvider) GetTables(ctx context.Context) ([]TableMetadata, error
 			Description: desc,
 		})
 	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("table row iteration error: %w", err)
+	}
 
 	return tables, nil
 }
@@ -100,6 +103,9 @@ func (p *SpannerProvider) GetColumns(ctx context.Context, tableName string) ([]C
 		}
 		col.IsNullable = (isNullableStr == "YES")
 		columns = append(columns, col)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("column row iteration error: %w", err)
 	}
 
 	return columns, nil
@@ -145,6 +151,9 @@ func (p *SpannerProvider) GetForeignKeys(ctx context.Context) ([]ForeignKeyMetad
 			return nil, fmt.Errorf("failed to scan Spanner foreign key: %w", err)
 		}
 		fks = append(fks, fk)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("foreign key row iteration error: %w", err)
 	}
 
 	return fks, nil

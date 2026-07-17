@@ -75,6 +75,9 @@ func (p *MySQLProvider) GetTables(ctx context.Context) ([]TableMetadata, error) 
 		}
 		tables = append(tables, table)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("table row iteration error: %w", err)
+	}
 
 	return tables, nil
 }
@@ -122,6 +125,9 @@ func (p *MySQLProvider) GetColumns(ctx context.Context, tableName string) ([]Col
 		}
 		columns = append(columns, col)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("column row iteration error: %w", err)
+	}
 
 	return columns, nil
 }
@@ -159,6 +165,9 @@ func (p *MySQLProvider) GetForeignKeys(ctx context.Context) ([]ForeignKeyMetadat
 			return nil, fmt.Errorf("failed to scan MySQL foreign key: %w", err)
 		}
 		fks = append(fks, fk)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("foreign key row iteration error: %w", err)
 	}
 
 	return fks, nil

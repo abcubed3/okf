@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/abcubed3/okf/pkg/bundle"
+	"github.com/abcubed3/okf/pkg/internal/links"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/text"
@@ -61,7 +62,7 @@ func BuildGraph(b *bundle.Bundle) *ConceptGraph {
 				if link, ok := n.(*ast.Link); ok {
 					target := string(link.Destination)
 
-					if isExternalLink(target) || strings.HasPrefix(target, "#") {
+					if links.IsExternal(target) || strings.HasPrefix(target, "#") {
 						return ast.WalkContinue, nil
 					}
 
@@ -103,16 +104,7 @@ func BuildGraph(b *bundle.Bundle) *ConceptGraph {
 	for id, node := range g.Nodes {
 		for _, outID := range node.OutLinks {
 			if targetNode, exists := g.Nodes[outID]; exists {
-				alreadyExists := false
-				for _, inID := range targetNode.InLinks {
-					if inID == id {
-						alreadyExists = true
-						break
-					}
-				}
-				if !alreadyExists {
-					targetNode.InLinks = append(targetNode.InLinks, id)
-				}
+				targetNode.InLinks = append(targetNode.InLinks, id)
 			}
 		}
 	}
@@ -120,12 +112,3 @@ func BuildGraph(b *bundle.Bundle) *ConceptGraph {
 	return g
 }
 
-// isExternalLink returns true if the URL starts with a protocol scheme.
-func isExternalLink(url string) bool {
-	lower := strings.ToLower(url)
-	return strings.HasPrefix(lower, "http://") ||
-		strings.HasPrefix(lower, "https://") ||
-		strings.HasPrefix(lower, "mailto:") ||
-		strings.HasPrefix(lower, "ftp://") ||
-		strings.HasPrefix(lower, "file://")
-}

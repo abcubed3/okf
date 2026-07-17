@@ -13,3 +13,4 @@ Demographic information and tracking IDs for store customers.
 
 ## Key Relationships
 *   Referenced by [Orders Table](orders.md) via `user_id`.
+See also remote link: [Stripe Charge](hub://stripe/api/charge) and [Fake](hub://stripe/api/fake)

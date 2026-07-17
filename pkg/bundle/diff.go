@@ -3,6 +3,7 @@ package bundle
 import (
 	"fmt"
 	"io"
+	"reflect"
 	"sort"
 )
 
@@ -106,7 +107,7 @@ func compareFrontmatter(oldFm, newFm Frontmatter) map[string]FieldDiff {
 		oldV, exists := oldFm.Extra[k]
 		if !exists {
 			diffs["extra."+k] = FieldDiff{OldValue: nil, NewValue: newV}
-		} else if fmt.Sprintf("%v", oldV) != fmt.Sprintf("%v", newV) {
+		} else if !reflect.DeepEqual(oldV, newV) {
 			diffs["extra."+k] = FieldDiff{OldValue: oldV, NewValue: newV}
 		}
 	}
@@ -123,8 +124,11 @@ func slicesEqual(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
 	}
-	for i := range a {
-		if a[i] != b[i] {
+	ac, bc := append([]string{}, a...), append([]string{}, b...)
+	sort.Strings(ac)
+	sort.Strings(bc)
+	for i := range ac {
+		if ac[i] != bc[i] {
 			return false
 		}
 	}

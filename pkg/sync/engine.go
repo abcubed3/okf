@@ -4,8 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
+	"github.com/abcubed3/okf/pkg/bundle"
 	"github.com/abcubed3/okf/pkg/harvester"
 	"github.com/abcubed3/okf/pkg/parser"
 )
@@ -51,8 +55,9 @@ func (e *Engine) Register(c Connector) {
 }
 
 func (e *Engine) Start(daemon bool, interval int) error {
-	ctx := context.Background()
-	
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	// Initialize connectors
 	for _, c := range e.connectors {
 		if err := c.Initialize(ctx, e.config); err != nil {
@@ -64,7 +69,7 @@ func (e *Engine) Start(daemon bool, interval int) error {
 		return e.syncOnce(ctx)
 	}
 
-	log.Printf("Starting OKF Sync daemon (Interval: %ds)", interval)
+	log.Printf("Starting OKF Sync daemon (Interval: %ds). Press Ctrl+C to stop.", interval)
 	ticker := time.NewTicker(time.Duration(interval) * time.Second)
 	defer ticker.Stop()
 
@@ -76,6 +81,7 @@ func (e *Engine) Start(daemon bool, interval int) error {
 	for {
 		select {
 		case <-ctx.Done():
+			log.Println("OKF Sync daemon shutting down gracefully...")
 			return nil
 		case <-ticker.C:
 			if err := e.syncOnce(ctx); err != nil {
@@ -89,21 +95,22 @@ func (e *Engine) syncOnce(ctx context.Context) error {
 	log.Println("Starting sync cycle...")
 
 	// 1. Parse local bundle
-	bundle, err := parser.ParseBundle(e.bundlePath)
+	parsedBundle, err := parser.ParseBundle(e.bundlePath)
 	if err != nil {
 		return fmt.Errorf("failed to parse local bundle: %w", err)
 	}
 
 	// 2. Push to all connectors
+	var validConcepts []*bundle.Concept
+	for _, concept := range parsedBundle.Concepts {
+		if concept.ParseError == "" {
+			validConcepts = append(validConcepts, concept)
+		}
+	}
+	
 	for _, c := range e.connectors {
-		for id, concept := range bundle.Concepts {
-			if concept.ParseError != "" {
-				continue
-			}
-			
-			if err := c.Push(ctx, concept); err != nil {
-				log.Printf("[%s] Failed to push concept %s: %v", c.Name(), id, err)
-			}
+		if err := c.Push(ctx, validConcepts); err != nil {
+			log.Printf("[%s] Failed to push concepts: %v", c.Name(), err)
 		}
 	}
 

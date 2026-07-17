@@ -34,6 +34,9 @@ func WriteConcepts(concepts []*bundle.Concept, outputDir string) error {
 		g.Go(func() error {
 			// Output path is relative to the output directory using the concept's relative path (c.Path).
 			targetPath := filepath.Join(absOutputDir, c.Path)
+			if !strings.HasPrefix(targetPath, absOutputDir+string(os.PathSeparator)) {
+				return fmt.Errorf("concept path %q escapes output directory", c.Path)
+			}
 
 			// Create target parent directory if it doesn't exist
 			parentDir := filepath.Dir(targetPath)

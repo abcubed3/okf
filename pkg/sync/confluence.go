@@ -31,16 +31,18 @@ func (c *ConfluenceConnector) Initialize(ctx context.Context, cfg *Config) error
 	return nil
 }
 
-func (c *ConfluenceConnector) Push(ctx context.Context, concept *bundle.Concept) error {
+func (c *ConfluenceConnector) Push(ctx context.Context, concepts []*bundle.Concept) error {
 	if c.config == nil {
 		return nil
 	}
-	extID := c.state.GetExternalID(concept.ID, c.Name())
-	if extID != "" {
-		return nil
+	for _, concept := range concepts {
+		extID := c.state.GetExternalID(concept.ID, c.Name())
+		if extID != "" {
+			continue
+		}
+		log.Printf("[confluence] Pushing concept %s...", concept.ID)
+		c.state.SetExternalID(concept.ID, c.Name(), fmt.Sprintf("confluence-%s", concept.ID))
 	}
-	log.Printf("[confluence] Pushing concept %s...", concept.ID)
-	c.state.SetExternalID(concept.ID, c.Name(), fmt.Sprintf("confluence-%s", concept.ID))
 	return nil
 }
 

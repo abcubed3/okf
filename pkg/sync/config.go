@@ -18,11 +18,15 @@ type Config struct {
 }
 
 type GitConfig struct {
-	Repo           string `yaml:"repo"`
-	Branch         string `yaml:"branch"`
-	Path           string `yaml:"path"`
-	PrivateKeyPath string `yaml:"private_key_path"`
-	Token          string `yaml:"token"`
+	Repo               string `yaml:"repo"`
+	Branch             string `yaml:"branch"`
+	Path               string `yaml:"path"`
+	PrivateKeyPath     string `yaml:"private_key_path"`
+	Token              string `yaml:"token"`
+	// InsecureSkipVerify disables SSH host key verification when true.
+	// WARNING: This makes the connection vulnerable to man-in-the-middle attacks.
+	// Only use in controlled environments where host verification is not possible.
+	InsecureSkipVerify bool   `yaml:"insecure_skip_verify"`
 }
 
 type GoogleDriveConfig struct {

@@ -227,7 +227,7 @@ func (h *OpenAPIHarvester) buildEndpointConcept(path, method string, op *openapi
 
 		for _, statusCode := range statusCodes {
 			rRef := op.Responses.Map()[statusCode]
-			if rRef == nil || rRef.Value != nil {
+			if rRef != nil && rRef.Value != nil {
 				r := rRef.Value
 				schemaType := "-"
 				if r != nil && len(r.Content) > 0 {
@@ -268,7 +268,10 @@ func (h *OpenAPIHarvester) buildEndpointConcept(path, method string, op *openapi
 		desc = op.Description
 	}
 	if len(desc) > 100 {
-		desc = desc[:97] + "..."
+		runes := []rune(desc)
+		if len(runes) > 100 {
+			desc = string(runes[:97]) + "..."
+		}
 	}
 	desc = strings.ReplaceAll(desc, "\n", " ")
 
