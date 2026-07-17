@@ -80,6 +80,10 @@ func ValidateBundle(b *bundle.Bundle) []Issue {
 		// 3. Link validation
 		linkIssues := validateLinks(c, b)
 		issues = append(issues, linkIssues...)
+
+		// 4. Citation validation
+		citationIssues := validateCitations(c, b)
+		issues = append(issues, citationIssues...)
 	}
 
 	return issues
@@ -113,11 +117,16 @@ func validateLinks(c *bundle.Concept, b *bundle.Bundle) []Issue {
 			continue
 		}
 
-		// Resolve the target path relative to the concept file's directory (using logical path)
-		currentDir := path.Dir(c.Path)
-		resolvedRelPath := path.Clean(path.Join(currentDir, target))
+		// Resolve logical relative or absolute path inside bundle
+		var resolvedRelPath string
+		if strings.HasPrefix(target, "/") {
+			resolvedRelPath = path.Clean(strings.TrimPrefix(target, "/"))
+		} else {
+			currentDir := path.Dir(c.Path)
+			resolvedRelPath = path.Clean(path.Join(currentDir, target))
+		}
 
-		// Normalize: strip leading slashes or dot-dots that go beyond the root
+		// Normalize: check if resolved path goes beyond the root
 		if strings.HasPrefix(resolvedRelPath, "..") {
 			issues = append(issues, Issue{
 				ConceptID: c.ID,
@@ -173,4 +182,67 @@ func isExternalLink(url string) bool {
 		strings.HasPrefix(lower, "mailto:") ||
 		strings.HasPrefix(lower, "ftp://") ||
 		strings.HasPrefix(lower, "file://")
+}
+
+// validateCitations verifies that any local/internal citation links resolve to existing concepts in the bundle.
+func validateCitations(c *bundle.Concept, b *bundle.Bundle) []Issue {
+	var issues []Issue
+
+	for _, cite := range c.Citations {
+		target := cite.URI
+
+		// Ignore external links
+		if isExternalLink(target) {
+			continue
+		}
+
+		// Ignore links with anchors only in the same file (e.g. #section-name)
+		if strings.HasPrefix(target, "#") {
+			continue
+		}
+
+		// Strip anchor/fragment part
+		if idx := strings.Index(target, "#"); idx != -1 {
+			target = target[:idx]
+		}
+
+		if target == "" {
+			continue
+		}
+
+		// Resolve path
+		var resolvedRelPath string
+		if strings.HasPrefix(target, "/") {
+			resolvedRelPath = path.Clean(strings.TrimPrefix(target, "/"))
+		} else {
+			currentDir := path.Dir(c.Path)
+			resolvedRelPath = path.Clean(path.Join(currentDir, target))
+		}
+
+		// Check if resolved path goes beyond root
+		if strings.HasPrefix(resolvedRelPath, "..") {
+			issues = append(issues, Issue{
+				ConceptID: c.ID,
+				Path:      c.Path,
+				Severity:  SeverityWarning,
+				Message:   fmt.Sprintf("citation link '%s' references a path outside the bundle", cite.URI),
+			})
+			continue
+		}
+
+		// Convert to Concept ID by removing extension
+		targetConceptID := strings.TrimSuffix(resolvedRelPath, ".md")
+
+		// Check existence
+		if _, exists := b.GetConcept(targetConceptID); !exists {
+			issues = append(issues, Issue{
+				ConceptID: c.ID,
+				Path:      c.Path,
+				Severity:  SeverityWarning,
+				Message:   fmt.Sprintf("broken citation link: target concept '%s' (resolved from '%s') does not exist", targetConceptID, cite.URI),
+			})
+		}
+	}
+
+	return issues
 }

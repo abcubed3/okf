@@ -19,6 +19,16 @@ type Frontmatter struct {
 	Extra map[string]interface{} `yaml:",inline"`
 }
 
+// Citation represents a single supporting source reference.
+type Citation struct {
+	// Number is the citation index number, e.g. 1 in [1].
+	Number int `yaml:"number" json:"number"`
+	// Title is the human-readable text description of the citation.
+	Title string `yaml:"title" json:"title"`
+	// URI is the link to the resource.
+	URI string `yaml:"uri" json:"uri"`
+}
+
 // Concept represents a single OKF document (concept).
 type Concept struct {
 	// ID is the unique identifier (relative filepath without .md suffix, e.g., "tables/users").
@@ -31,4 +41,6 @@ type Concept struct {
 	Body string
 	// ParseError contains the error description if the file could not be parsed.
 	ParseError string
+	// Citations holds the list of parsed citations from the concept.
+	Citations []Citation
 }

@@ -72,9 +72,14 @@ func BuildGraph(b *bundle.Bundle) *ConceptGraph {
 						return ast.WalkContinue, nil
 					}
 
-					// Resolve logical relative path inside bundle
-					currentDir := path.Dir(c.Path)
-					resolvedRelPath := path.Clean(path.Join(currentDir, target))
+					// Resolve logical relative or absolute path inside bundle
+					var resolvedRelPath string
+					if strings.HasPrefix(target, "/") {
+						resolvedRelPath = path.Clean(strings.TrimPrefix(target, "/"))
+					} else {
+						currentDir := path.Dir(c.Path)
+						resolvedRelPath = path.Clean(path.Join(currentDir, target))
+					}
 
 					if strings.HasPrefix(resolvedRelPath, "..") {
 						return ast.WalkContinue, nil

@@ -11,9 +11,15 @@ The **OKF-go** provides a high-performance suite of utilities to validate bundle
 ## 🚀 Key Features
 
 *   **Conformance Engine & Linter (`okf lint`):** Validates knowledge bundles for YAML frontmatter correctness, required attributes, and broken internal/external markdown links.
-*   **Metadata Harvesters (`okf harvest`):** Automatically extracts and converts schemas from databases (PostgreSQL, Cloud Spanner, BigQuery), OpenAPI specifications (Swagger), and Protobuf files into OKF concept documents.
+*   **Metadata Harvesters (`okf harvest`):** Automatically extracts and converts schemas from databases (PostgreSQL, MySQL, Cloud Spanner, BigQuery), OpenAPI specs, Protobuf files, Git repositories, and web pages into OKF concept documents.
 *   **Context Assembler (`okf assemble`):** Performs graph-based Breadth-First Search (BFS) starting from a core concept, resolving related concepts within a specified character/token budget to build pruned, high-quality prompt context.
 *   **Model Context Protocol Server (`okf mcp`):** Exposes your knowledge base directly to MCP-compatible AI clients (e.g. Claude Desktop, Cursor, Antigravity) via Stdio or SSE transport.
+*   **Bundle Operations (`okf diff` / `okf merge`):** Compare two OKF bundles for structural and content differences, or merge them to unify distributed knowledge bases.
+*   **AI Curator (`--ai-enrich` flag):** AI-powered concept curation during metadata harvesting to automatically generate business descriptions and categorize concepts using Gemini models.
+*   **JSON-LD Export (`okf export`):** Export your OKF graph into JSON-LD format for the semantic web.
+*   **Interactive HTML Portal Compiler (`okf doc`):** Compiles an OKF bundle into an interactive static web application with search, tagging, and link relationship graphs.
+*   **Language Server Protocol Daemon (`okf lsp`) & VS Code Extension:** Runs an LSP server over Standard I/O to publish diagnostic errors/warnings in real-time inside IDEs. A dedicated VS Code Extension is also available.
+*   **Bi-directional Sync Daemon (`okf sync`):** Automatically synchronizes local concepts with remote document nodes in Notion, Confluence, Jira, and Google Drive.
 
 ---
 
@@ -48,7 +54,7 @@ You can install the `okf` CLI without building it from source using the options 
 #### Option A: One-Line Shell Installer (macOS & Linux)
 Run the automated installer script to download, verify, and install the correct binary for your OS and CPU architecture:
 ```bash
-curl -sSfL https://raw.githubusercontent.com/abcubed3/okf/main/install.sh | sh
+curl -sSfL https://okfgo.dev/install.sh | sh
 ```
 *By default, this installs to `/usr/local/bin` (if writeable), `~/.local/bin`, or `./bin` (fallback).*
 
@@ -204,11 +210,11 @@ Ensures that the knowledge bundle conforms to the specification. It verifies YAM
 
 ### 2. Schema Harvester (`harvest`)
 
-Extracts metadata from databases, API specs, and protobuf files and generates structured OKF concepts automatically.
+Extracts metadata from databases, API specs, protobuf files, git repositories, and web pages, generating structured OKF concepts automatically.
 
 #### A. Database Schema Harvesting (`harvest db`)
 
-Supports **PostgreSQL**, **Cloud Spanner**, and **BigQuery**. Connects to the database, queries the information schema, and generates tables, columns, constraints, and relationships as OKF concepts.
+Supports **PostgreSQL**, **MySQL**, **Cloud Spanner**, and **BigQuery**. Connects to the database, queries the information schema, and generates tables, columns, constraints, and relationships as OKF concepts.
 
 ```bash
 # PostgreSQL Example
@@ -216,6 +222,12 @@ Supports **PostgreSQL**, **Cloud Spanner**, and **BigQuery**. Connects to the da
   --driver postgres \
   --conn "postgresql://postgres:password@localhost:5432/my_db?sslmode=disable" \
   --schema public \
+  --output ./my-bundle/tables
+
+# MySQL Example
+./okf harvest db \
+  --driver mysql \
+  --conn "user:password@tcp(localhost:3306)/my_db" \
   --output ./my-bundle/tables
 
 # Cloud Spanner Example
@@ -250,6 +262,26 @@ Extracts messages, RPC services, and field definitions from `.proto` schemas.
 ./okf harvest proto \
   --path ./protos/user_service.proto \
   --output ./my-bundle/protobufs
+```
+
+#### D. Git Repository Harvesting (`harvest git`)
+
+Extracts metadata from a Git repository, turning commits, file structures, and architecture documents into OKF concepts.
+
+```bash
+./okf harvest git \
+  --repo https://github.com/abcubed3/okf.git \
+  --output ./my-bundle/git
+```
+
+#### E. Web Harvesting (`harvest web`)
+
+Crawls target URLs to scrape documentation and structure it as OKF concepts. Optionally powered by the **LLM Semantic Harvester** (`harvest llm`) to convert raw HTML into well-formed Markdown nodes.
+
+```bash
+./okf harvest web \
+  --url https://example.com/docs \
+  --output ./my-bundle/web
 ```
 
 ---
@@ -326,6 +358,73 @@ To register the OKF-go MCP server with Claude Desktop, add the server to your `c
     *   `assemble_context`: Run depth-traversal context assembly dynamically from the LLM.
 
 ---
+
+### 5. Interactive HTML Portal Compiler (`doc`)
+
+Compiles an OKF knowledge bundle into a fully self-contained static HTML documentation portal featuring search, tagging, and link graphs.
+
+```bash
+# Compile bundle in current directory to docs/ folder
+./okf doc
+
+# Compile specific bundle to custom directory
+./okf doc --bundle /path/to/my-bundle --output /var/www/okf-portal
+```
+
+*   `--bundle`: Path to the OKF bundle (default: `.`).
+*   `--output`: Output path for the static website files (default: `docs`).
+
+---
+
+### 6. Language Server Protocol Daemon (`lsp`)
+
+Integrates OKF validation directly into your IDE. The LSP daemon runs over standard input/output to report conformance linter diagnostics (missing types, broken relative links) as you type.
+
+```bash
+# Start Language Server over Stdio
+./okf lsp
+```
+
+To use with Cursor or VS Code, configure your LSP client to invoke `./okf lsp` for `markdown` files.
+
+---
+
+### 7. Bi-directional Sync Daemon (`sync`)
+
+Keeps your OKF knowledge bundle in sync with remote document nodes. The sync daemon queries local changes and pushes them, while pulling remote updates from your workspace.
+
+```bash
+# Perform a single sync cycle
+./okf sync --config okf.yaml
+
+# Run continuously as a daemon
+./okf sync --config okf.yaml --daemon --interval 300
+```
+
+#### Configuration (`okf.yaml`)
+Create an `okf.yaml` file in the bundle directory to define connector credentials:
+
+```yaml
+connectors:
+  google_drive:
+    folder_id: "1234567890abcdef"
+    service_account: "sa-test@project.iam.gserviceaccount.com"
+  notion:
+    token: "secret_notion_api_token"
+    parent_id: "notion_page_parent_uuid"
+  confluence:
+    domain: "your-company.atlassian.net"
+    email: "user@company.com"
+    token: "jira_api_token_here"
+    space_key: "SPACEKEY"
+  jira:
+    domain: "your-company.atlassian.net"
+    email: "user@company.com"
+    token: "jira_api_token_here"
+```
+
+---
+
 
 ## 🧪 Testing the Codebase
 

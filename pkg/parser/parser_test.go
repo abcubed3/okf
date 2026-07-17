@@ -280,6 +280,39 @@ func TestParseBundleWithOptions_DefaultFallback(t *testing.T) {
 	}
 }
 
+func TestParseCitations(t *testing.T) {
+	input := `---
+type: Playbook
+title: Incident Triage
+---
+# Trigger
+Alert fires.
+
+# Citations
+[1] [Alert Runbook](https://wiki.acme.internal/runbook)
+[2] /tables/orders.md
+`
+	r := strings.NewReader(input)
+	c, err := ParseConceptReader(r, "triage.md", "triage")
+	if err != nil {
+		t.Fatalf("ParseConceptReader failed: %v", err)
+	}
+
+	if len(c.Citations) != 2 {
+		t.Fatalf("expected 2 citations, got %d", len(c.Citations))
+	}
+
+	c1 := c.Citations[0]
+	if c1.Number != 1 || c1.Title != "Alert Runbook" || c1.URI != "https://wiki.acme.internal/runbook" {
+		t.Errorf("unexpected citation 1 values: %+v", c1)
+	}
+
+	c2 := c.Citations[1]
+	if c2.Number != 2 || c2.Title != "/tables/orders.md" || c2.URI != "/tables/orders.md" {
+		t.Errorf("unexpected citation 2 values: %+v", c2)
+	}
+}
+
 func BenchmarkParseConceptReader(b *testing.B) {
 	input := `---
 type: BigQuery Table

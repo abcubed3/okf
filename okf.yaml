@@ -1,0 +1,16 @@
+# OKF Configuration
+# This file configures connectors, build targets, and global settings for the OKF-go tool.
+
+# --- Connectors ---
+# Define external data sources used for harvesting and syncing bundles.
+connectors:
+  google_drive:
+    type: google_drive
+    # The ID of the Google Drive folder containing the OKF bundle(s).
+    folder_id: "[ENCRYPTION_KEY]"
+    # Optional: If true, the connector will automatically resolve linked Google Sheets and Docs.
+    resolve_linked_resources: true
+    # Optional: Explicit service account JSON file for authentication.
+    # If not provided, uses Application Default Credentials (ADC).
+    # gcloud auth application-default login
+    # service_account: "path/to/service-account.json"

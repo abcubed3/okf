@@ -52,6 +52,9 @@ func TestGenerate(t *testing.T) {
 		`"type":"BigQuery Table"`,
 		`"type":"Playbook"`,
 		`# GA4 Sample Merchandise Store Knowledge Catalog`, // Should be in the index key
+		`<!-- Schema.org JSON-LD Graph Bridge -->`,
+		`"Dataset"`,
+		`"TechArticle"`,
 	}
 
 	for _, expected := range expectedSubstrings {

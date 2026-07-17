@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -224,6 +225,9 @@ func ParseConceptReader(r io.Reader, relPath, conceptID string) (*bundle.Concept
 		return nil, err
 	}
 
+	body := strings.Join(bodyLines, "\n")
+	citations := ParseCitationsFromMarkdown(body)
+
 	var fm bundle.Frontmatter
 	if hasFrontmatter {
 		fmContent := strings.Join(frontmatterLines, "\n")
@@ -231,9 +235,10 @@ func ParseConceptReader(r io.Reader, relPath, conceptID string) (*bundle.Concept
 		if err != nil {
 			// If YAML parsing fails, return the concept with the error, so validation can catch it
 			return &bundle.Concept{
-				ID:   conceptID,
-				Path: relPath,
-				Body: strings.Join(bodyLines, "\n"),
+				ID:        conceptID,
+				Path:      relPath,
+				Body:      body,
+				Citations: citations,
 			}, fmt.Errorf("failed to parse frontmatter YAML: %w", err)
 		}
 	}
@@ -242,6 +247,60 @@ func ParseConceptReader(r io.Reader, relPath, conceptID string) (*bundle.Concept
 		ID:          conceptID,
 		Path:        relPath,
 		Frontmatter: fm,
-		Body:        strings.Join(bodyLines, "\n"),
+		Body:        body,
+		Citations:   citations,
 	}, nil
+}
+
+// ParseCitationsFromMarkdown extracts concept citations from under the '# Citations' section.
+func ParseCitationsFromMarkdown(body string) []bundle.Citation {
+	var citations []bundle.Citation
+	lines := strings.Split(body, "\n")
+	inCitations := false
+
+	// Regex matching:
+	// Group 1: Citation Number
+	// Group 2 & 3: Link title and Link URI (if formatted as [Title](URI))
+	// Group 4: Raw URI (if formatted as plain URL/path)
+	re := regexp.MustCompile(`^\[(\d+)\]\s+(?:\[([^\]]+)\]\(([^)]+)\)|(\S+))`)
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		// Detect # Citations header
+		if strings.HasPrefix(line, "#") {
+			headerText := strings.TrimSpace(strings.TrimLeft(line, "#"))
+			if strings.ToLower(headerText) == "citations" {
+				inCitations = true
+				continue
+			} else {
+				inCitations = false
+			}
+		}
+
+		if inCitations {
+			matches := re.FindStringSubmatch(line)
+			if len(matches) > 0 {
+				numVal := 0
+				fmt.Sscanf(matches[1], "%d", &numVal)
+
+				title := matches[2]
+				uri := matches[3]
+				if uri == "" {
+					uri = matches[4]
+					title = uri
+				}
+
+				citations = append(citations, bundle.Citation{
+					Number: numVal,
+					Title:  title,
+					URI:    uri,
+				})
+			}
+		}
+	}
+	return citations
 }

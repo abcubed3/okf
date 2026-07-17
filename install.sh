@@ -1,5 +1,5 @@
 #!/bin/sh
-# OKF CLI Installer
+# OKF-go CLI Installer
 # Usage: curl -sSfL https://raw.githubusercontent.com/abcubed3/okf/main/install.sh | sh
 # Or specify version: curl -sSfL https://raw.githubusercontent.com/abcubed3/okf/main/install.sh | sh -s -- v1.0.0
 

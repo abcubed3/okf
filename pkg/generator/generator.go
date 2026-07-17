@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/abcubed3/okf/pkg/bundle"
+	"github.com/abcubed3/okf/pkg/export"
 	"github.com/abcubed3/okf/pkg/parser"
 	"golang.org/x/sync/errgroup"
 )
@@ -34,6 +36,8 @@ type ConceptJSON struct {
 	Timestamp string `json:"timestamp,omitempty"`
 	// Body is the raw markdown content of this concept.
 	Body string `json:"body"`
+	// Citations holds the list of supporting citations.
+	Citations []bundle.Citation `json:"citations,omitempty"`
 }
 
 // ConceptIndexEntry is a lightweight summary used for the bundle index — no body.
@@ -75,6 +79,7 @@ type BundleJSONData struct {
 type templateData struct {
 	Title      string
 	BundleJSON template.JS
+	JSONLD     template.HTML
 }
 
 // Generate compiles the OKF bundle into an interactive static web application.
@@ -168,6 +173,7 @@ func Generate(bundlePath, outputPath string) error {
 				Tags:        c.Frontmatter.Tags,
 				Timestamp:   c.Frontmatter.Timestamp,
 				Body:        c.Body,
+				Citations:   c.Citations,
 			}
 			cJSONBytes, err := json.Marshal(cJSON)
 			if err != nil {
@@ -207,9 +213,15 @@ func Generate(bundlePath, outputPath string) error {
 	}
 	defer f.Close()
 
+	jsonLdStr, err := export.GetJSONLDString(b)
+	if err != nil {
+		return fmt.Errorf("failed to generate JSON-LD: %w", err)
+	}
+
 	tmplData := templateData{
 		Title:      title,
 		BundleJSON: template.JS(bundleJSONBytes),
+		JSONLD:     template.HTML("<!-- Schema.org JSON-LD Graph Bridge -->\n<script type=\"application/ld+json\">\n" + jsonLdStr + "\n</script>"),
 	}
 
 	if err := tmpl.Execute(f, tmplData); err != nil {

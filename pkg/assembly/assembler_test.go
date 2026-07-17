@@ -48,6 +48,17 @@ func TestBuildGraphAndAssemble(t *testing.T) {
 		Body: "This is C, referencing nothing.",
 	}
 
+	b.Concepts["concepts/d"] = &bundle.Concept{
+		ID:   "concepts/d",
+		Path: "concepts/d.md",
+		Frontmatter: bundle.Frontmatter{
+			Type:  "ConceptType",
+			Title: "Concept D",
+			Desc:  "Fourth concept",
+		},
+		Body: "This is D, referencing absolute [Concept C](/concepts/c.md).",
+	}
+
 	g := BuildGraph(b)
 
 	// Check graph edges
@@ -62,6 +73,11 @@ func TestBuildGraphAndAssemble(t *testing.T) {
 	}
 	if len(nodeB.InLinks) != 1 || nodeB.InLinks[0] != "concepts/a" {
 		t.Errorf("expected B to have inlink from A, got %v", nodeB.InLinks)
+	}
+
+	nodeD := g.Nodes["concepts/d"]
+	if len(nodeD.OutLinks) != 1 || nodeD.OutLinks[0] != "concepts/c" {
+		t.Errorf("expected D to link to C, got %v", nodeD.OutLinks)
 	}
 
 	// Test assembly with depth 0

@@ -11,6 +11,8 @@ const HTMLTemplate = `<!DOCTYPE html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{.Title}} — OKF Documentation</title>
     
+    {{.JSONLD}}
+    
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1074,6 +1076,36 @@ const HTMLTemplate = `<!DOCTYPE html>
                 htmlBody = '<p style="color: red">Error rendering markdown: ' + err.message + '</p><pre>' + concept.body + '</pre>';
             }
 
+            let citationsBlock = '';
+            if (concept.citations && concept.citations.length > 0) {
+                citationsBlock = 
+                    '<div class="citations-container" style="margin-top: 3rem; border-top: 1px solid var(--border-color); padding-top: 2rem;">' +
+                        '<h3 style="margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem; font-size: 1.1rem; font-weight: 600;">' +
+                            '<svg style="width: 18px; height: 18px; fill: currentColor; opacity: 0.8;" viewBox="0 0 24 24"><path d="M14 17h6v2h-6zm0-4h6v2h-6zm0-4h6v2h-6zm-4 8H4v-2h6zm0-4H4v-2h6zm0-4H4V9h6z"/></svg>' +
+                            'Citations & Sources' +
+                        '</h3>' +
+                        '<div class="citations-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">' +
+                            concept.citations.map(c => {
+                                const isLocal = !c.uri.startsWith('http://') && !c.uri.startsWith('https://');
+                                const displayUri = isLocal ? c.uri : new URL(c.uri).hostname;
+                                const extIcon = isLocal 
+                                    ? '' 
+                                    : ' <span style="font-size: 0.75rem; opacity: 0.6;">↗</span>';
+                                const targetAttr = isLocal ? '' : 'target="_blank" rel="noopener noreferrer"';
+                                return (
+                                    '<div class="citation-card" style="padding: 1rem; border: 1px solid var(--border-color); border-radius: 10px; background-color: var(--bg-secondary); display: flex; align-items: flex-start; gap: 0.75rem; box-shadow: var(--shadow-sm); transition: var(--transition);">' +
+                                        '<span style="font-weight: 600; color: var(--accent-color); font-size: 0.8rem; padding: 0.15rem 0.45rem; border-radius: 6px; background-color: var(--accent-light); flex-shrink: 0; line-height: 1;">[' + c.number + ']</span>' +
+                                        '<div style="display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; flex: 1;">' +
+                                            '<a href="' + c.uri + '" ' + targetAttr + ' style="font-weight: 500; font-size: 0.95rem; text-decoration: none; color: var(--accent-color); overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; line-height: 1.3;">' + c.title + extIcon + '</a>' +
+                                            '<span style="font-size: 0.75rem; color: var(--text-secondary); word-break: break-all; font-family: monospace;">' + displayUri + '</span>' +
+                                        '</div>' +
+                                    '</div>'
+                                );
+                            }).join('') +
+                        '</div>' +
+                    '</div>';
+            }
+
             contentPanel.innerHTML = 
                 '<div class="concept-header">' +
                     '<div class="concept-title-row">' +
@@ -1088,7 +1120,8 @@ const HTMLTemplate = `<!DOCTYPE html>
                 '</div>' +
                 '<div class="markdown-body">' +
                     htmlBody +
-                '</div>';
+                '</div>' +
+                citationsBlock;
 
             // Reset scroll
             document.getElementById('panel-doc').scrollTop = 0;

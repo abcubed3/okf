@@ -57,18 +57,51 @@ func TestValidateBundle(t *testing.T) {
 Check out this [External Link](https://google.com) which should be ignored.`,
 	}
 
+	// 5. Concept with absolute links (valid and broken)
+	b.Concepts["abs-links-test"] = &bundle.Concept{
+		ID:   "abs-links-test",
+		Path: "sub/folder/abs-links-test.md",
+		Frontmatter: bundle.Frontmatter{
+			Type:  "Playbook",
+			Title: "Test Absolute Links",
+			Desc:  "Checking absolute link verification.",
+		},
+		Body: `A [Valid Absolute](/valid.md) and a [Broken Absolute](/non-existent-abs.md).`,
+	}
+
+	// 6. Concept with citations (valid and broken)
+	b.Concepts["citations-test"] = &bundle.Concept{
+		ID:   "citations-test",
+		Path: "citations-test.md",
+		Frontmatter: bundle.Frontmatter{
+			Type:  "Playbook",
+			Title: "Test Citations",
+			Desc:  "Checking citation validation.",
+		},
+		Citations: []bundle.Citation{
+			{Number: 1, Title: "Valid Link", URI: "valid.md"},
+			{Number: 2, Title: "Broken Link", URI: "non-existent-cite.md"},
+			{Number: 3, Title: "External Link", URI: "https://example.com"},
+		},
+		Body: "Testing citations.",
+	}
+
 	issues := ValidateBundle(b)
 
 	// We expect:
 	// 1. Error on "missing-type" (missing type field)
 	// 2. Warning on "missing-desc" (missing description field)
 	// 3. Warning on "links-test" (broken link to non-existent.md)
+	// 4. Warning on "abs-links-test" (broken absolute link)
+	// 5. Warning on "citations-test" (broken citation link)
 	expectedErrors := map[string]string{
 		"missing-type": "missing or empty 'type' field in frontmatter",
 	}
 	expectedWarnings := map[string]string{
-		"missing-desc": "missing recommended 'description' field",
-		"links-test":   "broken link: target concept 'non-existent' (resolved from 'non-existent.md') does not exist",
+		"missing-desc":   "missing recommended 'description' field",
+		"links-test":     "broken link: target concept 'non-existent' (resolved from 'non-existent.md') does not exist",
+		"abs-links-test": "broken link: target concept 'non-existent-abs' (resolved from '/non-existent-abs.md') does not exist",
+		"citations-test": "broken citation link: target concept 'non-existent-cite' (resolved from 'non-existent-cite.md') does not exist",
 	}
 
 	for _, issue := range issues {
