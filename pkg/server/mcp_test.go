@@ -12,7 +12,7 @@ import (
 // It returns the session and a cancel function; the caller must call cancel() to clean up.
 func newTestSession(t *testing.T) (*mcp.ClientSession, context.CancelFunc) {
 	t.Helper()
-	srv, err := NewMCPServer("../../testdata/sample")
+	srv, err := NewMCPServer("../../testdata/bundles/sample")
 	if err != nil {
 		t.Fatalf("failed to create server: %v", err)
 	}
@@ -37,7 +37,7 @@ func newTestSession(t *testing.T) (*mcp.ClientSession, context.CancelFunc) {
 
 func TestMCPServer(t *testing.T) {
 	// Create a real server pointing to our testdata sample
-	srv, err := NewMCPServer("../../testdata/sample")
+	srv, err := NewMCPServer("../../testdata/bundles/sample")
 	if err != nil {
 		t.Fatalf("failed to create server: %v", err)
 	}

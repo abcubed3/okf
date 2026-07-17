@@ -9,7 +9,7 @@ import (
 
 func TestGenerate(t *testing.T) {
 	// Locate testdata sample relative to this package directory
-	samplePath := filepath.Join("..", "..", "testdata", "sample")
+	samplePath := filepath.Join("..", "..", "testdata", "bundles", "sample")
 
 	// Ensure the sample path exists before testing
 	if _, err := os.Stat(samplePath); os.IsNotExist(err) {
@@ -115,7 +115,7 @@ More text`,
 }
 
 func BenchmarkGenerate(b *testing.B) {
-	samplePath := filepath.Join("..", "..", "testdata", "sample")
+	samplePath := filepath.Join("..", "..", "testdata", "bundles", "sample")
 	if _, err := os.Stat(samplePath); os.IsNotExist(err) {
 		b.Skipf("sample data directory %q not found", samplePath)
 	}

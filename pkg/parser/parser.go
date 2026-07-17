@@ -90,8 +90,17 @@ func ParseBundleWithOptions(rootPath string, opts ParseOptions) (*bundle.Bundle,
 		}
 
 		filename := filepath.Base(relPath)
-		// Skip reserved files
+		// Skip reserved files from being parsed as regular concepts.
+		// However, the root index.md might contain okf_version, so extract it.
 		if filename == "index.md" || filename == "log.md" {
+			if relPath == "index.md" {
+				if f, err := os.Open(path); err == nil {
+					if c, parseErr := ParseConceptReader(f, relPath, "index"); parseErr == nil {
+						b.OKFVersion = c.Frontmatter.OKFVersion
+					}
+					f.Close()
+				}
+			}
 			return nil
 		}
 

@@ -15,6 +15,8 @@ type Frontmatter struct {
 	Tags []string `yaml:"tags,omitempty"`
 	// Timestamp is the RFC3339 formatted generation/update time.
 	Timestamp string `yaml:"timestamp,omitempty"`
+	// OKFVersion is the targeted OKF version, only valid in the root index.md frontmatter.
+	OKFVersion string `yaml:"okf_version,omitempty"`
 	// Extra captures any other custom metadata key-value pairs inline.
 	Extra map[string]interface{} `yaml:",inline"`
 }

@@ -111,8 +111,8 @@ func TestParseBundle_EmptyDirectory(t *testing.T) {
 
 func TestParseBundle_SkipsReservedFiles(t *testing.T) {
 	dir := t.TempDir()
-	// Write reserved files that should be skipped
-	writeMockConcept(t, dir, "index.md", "---\ntype: Index\n---\n# Index")
+	// Write reserved files that should be skipped as concepts, but root index.md should be parsed for okf_version
+	writeMockConcept(t, dir, "index.md", "---\nokf_version: \"0.1\"\ntype: Index\n---\n# Index")
 	writeMockConcept(t, dir, "log.md", "---\ntype: Log\n---\n# Log")
 	// Write a valid concept
 	writeMockConcept(t, dir, "tables/users.md", "---\ntype: Table\ntitle: Users\n---\n# Users")
@@ -126,6 +126,9 @@ func TestParseBundle_SkipsReservedFiles(t *testing.T) {
 	}
 	if _, ok := b.Concepts["tables/users"]; !ok {
 		t.Error("expected concept 'tables/users' to be present")
+	}
+	if b.OKFVersion != "0.1" {
+		t.Errorf("expected OKFVersion '0.1', got %q", b.OKFVersion)
 	}
 }
 

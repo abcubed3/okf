@@ -155,8 +155,9 @@ func (c *GoogleDriveConnector) Pull(ctx context.Context) ([]*bundle.Concept, err
 	log.Printf("[google_drive] Pulling updates...")
 
 	// Default to a wide query if no last sync time
-	lastSyncStr := c.state.state.LastSync.Format(time.RFC3339)
-	if c.state.state.LastSync.IsZero() {
+	lastSync := c.state.GetLastSync()
+	lastSyncStr := lastSync.Format(time.RFC3339)
+	if lastSync.IsZero() {
 		// Just a fallback in case we want to pull all
 		lastSyncStr = time.Date(1970, 1, 1, 0, 0, 0, 0, time.UTC).Format(time.RFC3339)
 	}

@@ -9,6 +9,8 @@ type Bundle struct {
 	Path string
 	// Concepts maps each unique Concept ID (e.g., "tables/users") to its Concept data.
 	Concepts map[string]*Concept
+	// OKFVersion is the targeted OKF version declared in the bundle-root index.md frontmatter.
+	OKFVersion string
 }
 
 // NewBundle initializes a new empty Bundle with the given root path.
