@@ -26,6 +26,7 @@ import (
 	"github.com/abcubed3/okf/pkg/server"
 	okfsync "github.com/abcubed3/okf/pkg/sync"
 	"github.com/abcubed3/okf/pkg/validator"
+	"github.com/go-git/go-git/v5"
 
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/googleapis/go-sql-spanner"
@@ -462,7 +463,28 @@ func runHarvestGit(args []string) {
 		os.Exit(1)
 	}
 
-	h := harvester.NewGitHarvester(*repoPath)
+	localRepoPath := *repoPath
+	if parser.IsGitURL(*repoPath) {
+		fmt.Printf("Cloning remote Git repository %q...\n", *repoPath)
+		tempDir, err := os.MkdirTemp("", "okf-harvest-git-*")
+		if err != nil {
+			fmt.Printf("Error: Failed to create temporary directory for git clone: %v\n", err)
+			os.Exit(1)
+		}
+		defer os.RemoveAll(tempDir)
+
+		_, err = git.PlainClone(tempDir, false, &git.CloneOptions{
+			URL:      *repoPath,
+			Progress: os.Stdout,
+		})
+		if err != nil {
+			fmt.Printf("Error: Failed to clone remote git repository: %v\n", err)
+			os.Exit(1)
+		}
+		localRepoPath = tempDir
+	}
+
+	h := harvester.NewGitHarvester(localRepoPath)
 	concepts, err := h.Harvest(context.Background())
 	if err != nil {
 		fmt.Printf("Error: Harvesting git repository failed: %v\n", err)

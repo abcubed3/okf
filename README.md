@@ -185,9 +185,10 @@ Supports **PostgreSQL**, **MySQL**, **Cloud Spanner**, and **BigQuery**. Connect
 Parses OpenAPI spec documents (JSON/YAML) and generates OKF concepts representing API endpoints.
 
 ```bash
-./okf harvest openapi \
-  --spec ./docs/openapi_spec.yaml \
-  --output ./my-bundle/endpoints
+# Harvest an OpenAPI spec and output to a bundle
+okf harvest openapi 
+  --spec ../openapi-sample.yaml 
+  --output harvested-endpoints 
 ```
 
 #### C. Protobuf Schema Harvesting (`harvest proto`)
@@ -195,7 +196,7 @@ Parses OpenAPI spec documents (JSON/YAML) and generates OKF concepts representin
 Extracts messages, RPC services, and field definitions from `.proto` schemas.
 
 ```bash
-./okf harvest proto \
+okf harvest proto \
   --path ./protos/user_service.proto \
   --output ./my-bundle/protobufs
 ```

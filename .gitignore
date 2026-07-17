@@ -8,3 +8,9 @@ okf.exe
 .okf/
 .okf_cache/
 okf_state.json
+
+# Generated test output folders
+testdata/bundles/harvested-*/
+testdata/bundles/mygit/
+testdata/harvested-*/
+testdata/bundles/test-*/

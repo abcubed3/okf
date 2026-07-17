@@ -1,0 +1,78 @@
+openapi: 3.0.0
+info:
+  title: Sample Petstore API
+  description: A sample OpenAPI specification for testing OKF harvesting.
+  version: 1.0.0
+paths:
+  /pets:
+    get:
+      summary: List all pets
+      description: Returns a list of all pets in the store.
+      parameters:
+        - name: limit
+          in: query
+          description: How many items to return at one time (max 100)
+          required: false
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: A paged array of pets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    name:
+                      type: string
+                    tag:
+                      type: string
+    post:
+      summary: Create a pet
+      description: Adds a new pet to the store.
+      requestBody:
+        description: Pet info to add
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                tag:
+                  type: string
+      responses:
+        '201':
+          description: Null response
+  /pets/{id}:
+    get:
+      summary: Info for a specific pet
+      description: Returns info about a single pet.
+      parameters:
+        - name: id
+          in: path
+          description: The ID of the pet to retrieve
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Expected response to a valid request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  name:
+                    type: string
+                  tag:
+                    type: string
