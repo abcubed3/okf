@@ -1,0 +1,10 @@
+# Binaries and packaging
+dist/
+okf
+okf.exe
+*.exe
+
+# Local state & caches
+.okf/
+.okf_cache/
+okf_state.json
