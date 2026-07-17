@@ -1,6 +1,7 @@
 package bundle
 
 import (
+	"fmt"
 	"testing"
 )
 
@@ -190,5 +191,53 @@ func TestConceptParseError(t *testing.T) {
 	}
 	if c.ParseError == "" {
 		t.Error("expected ParseError to be set")
+	}
+}
+
+func makeLargeTestBundle() *Bundle {
+	b := NewBundle("/tmp/test-bundle")
+	for i := 0; i < 100; i++ {
+		id := fmt.Sprintf("tables/concept-%d", i)
+		var typ string
+		if i%2 == 0 {
+			typ = "PostgreSQL Table"
+		} else {
+			typ = "API Endpoint"
+		}
+		b.Concepts[id] = &Concept{
+			ID:   id,
+			Path: id + ".md",
+			Frontmatter: Frontmatter{
+				Type:  typ,
+				Title: fmt.Sprintf("Concept %d", i),
+				Tags:  []string{fmt.Sprintf("tag-%d", i%10), "common-tag", fmt.Sprintf("another-tag-%d", i%5)},
+			},
+			Body: "Some body content",
+		}
+	}
+	return b
+}
+
+func BenchmarkBundleListTypes(b *testing.B) {
+	bundle := makeLargeTestBundle()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = bundle.ListTypes()
+	}
+}
+
+func BenchmarkBundleListTags(b *testing.B) {
+	bundle := makeLargeTestBundle()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = bundle.ListTags()
+	}
+}
+
+func BenchmarkBundleConceptsByType(b *testing.B) {
+	bundle := makeLargeTestBundle()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = bundle.ConceptsByType("PostgreSQL Table")
 	}
 }

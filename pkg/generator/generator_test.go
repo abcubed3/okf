@@ -113,3 +113,24 @@ More text`,
 		})
 	}
 }
+
+func BenchmarkGenerate(b *testing.B) {
+	samplePath := filepath.Join("..", "..", "testdata", "sample")
+	if _, err := os.Stat(samplePath); os.IsNotExist(err) {
+		b.Skipf("sample data directory %q not found", samplePath)
+	}
+
+	tempOutDir, err := os.MkdirTemp("", "okf-bench-gen-*")
+	if err != nil {
+		b.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempOutDir)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		err := Generate(samplePath, tempOutDir)
+		if err != nil {
+			b.Fatalf("Generate() failed: %v", err)
+		}
+	}
+}

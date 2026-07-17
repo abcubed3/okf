@@ -2,6 +2,7 @@ package export
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/abcubed3/okf/pkg/bundle"
@@ -144,5 +145,74 @@ func TestParseColumnsFromMarkdown(t *testing.T) {
 	}
 	if cols[1].Name != "name" || cols[1].ValueReference != "varchar(255)" || cols[1].Description != "user name" {
 		t.Errorf("unexpected column 1: %+v", cols[1])
+	}
+}
+
+func makeLargeExportBundle() *bundle.Bundle {
+	b := bundle.NewBundle("/test-export")
+	for i := 0; i < 50; i++ {
+		if i%3 == 0 {
+			id := fmt.Sprintf("tables/users-%d", i)
+			b.Concepts[id] = &bundle.Concept{
+				ID:   id,
+				Path: id + ".md",
+				Frontmatter: bundle.Frontmatter{
+					Type:      "PostgreSQL Table",
+					Title:     fmt.Sprintf("Users Table %d", i),
+					Desc:      "Stores user accounts",
+					Resource:  "users",
+					Tags:      []string{"db", "user"},
+					Timestamp: "2026-07-15T00:00:00Z",
+				},
+				Body: `
+# Users Table
+Stores user accounts.
+
+## Schema
+| Column | Type | Nullable | Default | Description |
+| ------ | ---- | -------- | ------- | ----------- |
+| id | integer | NO | nextval('users_id_seq') | Unique ID |
+| email | character varying | NO | | User email |
+`,
+			}
+		} else if i%3 == 1 {
+			id := fmt.Sprintf("endpoints/create-user-%d", i)
+			b.Concepts[id] = &bundle.Concept{
+				ID:   id,
+				Path: id + ".md",
+				Frontmatter: bundle.Frontmatter{
+					Type:      "API Endpoint",
+					Title:     fmt.Sprintf("POST /users/%d", i),
+					Desc:      "Creates a new user",
+					Resource:  "/users",
+					Tags:      []string{"api"},
+					Timestamp: "2026-07-15T00:00:00Z",
+				},
+				Body: `# POST /users`,
+			}
+		} else {
+			id := fmt.Sprintf("playbooks/deploy-%d", i)
+			b.Concepts[id] = &bundle.Concept{
+				ID:   id,
+				Path: id + ".md",
+				Frontmatter: bundle.Frontmatter{
+					Type:      "Playbook",
+					Title:     fmt.Sprintf("Deployment Playbook %d", i),
+					Desc:      "How to deploy the service",
+					Tags:      []string{"ops"},
+					Timestamp: "2026-07-15T00:00:00Z",
+				},
+				Body: `# Deploying`,
+			}
+		}
+	}
+	return b
+}
+
+func BenchmarkExportBundleToJSONLD(b *testing.B) {
+	testBundle := makeLargeExportBundle()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = ExportBundleToJSONLD(testBundle)
 	}
 }
