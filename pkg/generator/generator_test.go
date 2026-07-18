@@ -25,24 +25,24 @@ func TestGenerate(t *testing.T) {
 		t.Fatalf("Generate() failed: %v", err)
 	}
 
-	// Verify index.html exists
-	indexPath := filepath.Join(tempOutDir, "index.html")
+	// Verify viz.html exists
+	indexPath := filepath.Join(tempOutDir, "viz.html")
 	info, err := os.Stat(indexPath)
 	if err != nil {
-		t.Fatalf("index.html was not generated: %v", err)
+		t.Fatalf("viz.html was not generated: %v", err)
 	}
 	if info.IsDir() {
-		t.Fatal("expected index.html to be a file, but it is a directory")
+		t.Fatal("expected viz.html to be a file, but it is a directory")
 	}
 
-	// Read index.html content
+	// Read viz.html content
 	contentBytes, err := os.ReadFile(indexPath)
 	if err != nil {
-		t.Fatalf("failed to read index.html: %v", err)
+		t.Fatalf("failed to read viz.html: %v", err)
 	}
 	content := string(contentBytes)
 
-	// Verify key elements are in index.html
+	// Verify key elements are in viz.html
 	expectedSubstrings := []string{
 		"<title>GA4 Sample Merchandise Store Knowledge Catalog — OKF Documentation</title>",
 		`"title":"GA4 Sample Merchandise Store Knowledge Catalog"`,
@@ -59,7 +59,7 @@ func TestGenerate(t *testing.T) {
 
 	for _, expected := range expectedSubstrings {
 		if !strings.Contains(content, expected) {
-			t.Errorf("expected generated index.html to contain %q, but it did not", expected)
+			t.Errorf("expected generated viz.html to contain %q, but it did not", expected)
 		}
 	}
 

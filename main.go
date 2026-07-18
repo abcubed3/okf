@@ -615,13 +615,13 @@ func runAssemble(args []string) {
 		Format:        *format,
 	}
 
-	ctxStr, err := assembly.AssembleContext(g, startID, opts)
+	res, err := assembly.AssembleContext(g, startID, opts)
 	if err != nil {
 		fmt.Printf("Error: Failed to assemble context: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Println(ctxStr)
+	fmt.Println(res.Context)
 }
 
 // runServer starts the MCP (Model Context Protocol) server over either Stdio or SSE transport.

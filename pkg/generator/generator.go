@@ -229,13 +229,13 @@ func Generate(bundlePath, outputPath string) error {
 		return fmt.Errorf("failed to copy assets: %w", err)
 	}
 
-	// 8. Render index.html using html/template (XSS-safe)
+	// 8. Render viz.html using html/template (XSS-safe)
 	tmpl, err := template.New("okf-doc").Parse(HTMLTemplate)
 	if err != nil {
 		return fmt.Errorf("failed to parse HTML template: %w", err)
 	}
 
-	destHTMLPath := filepath.Join(outputPath, "index.html")
+	destHTMLPath := filepath.Join(outputPath, "viz.html")
 	f, err := os.Create(destHTMLPath)
 	if err != nil {
 		return fmt.Errorf("failed to create destination HTML file: %w", err)

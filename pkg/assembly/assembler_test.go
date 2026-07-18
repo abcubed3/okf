@@ -88,30 +88,33 @@ func TestBuildGraphAndAssemble(t *testing.T) {
 		Direction:     DirectionOutbound,
 		Format:        "xml",
 	}
-	ctxStr, err := AssembleContext(g, "concepts/a", opts)
+	res, err := AssembleContext(g, "concepts/a", opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	ctxStr := res.Context
 	if !strings.Contains(ctxStr, `id="concepts/a"`) || strings.Contains(ctxStr, `id="concepts/b"`) {
 		t.Errorf("expected depth 0 to only contain concept A, got:\n%s", ctxStr)
 	}
 
 	// Test assembly with depth 1
 	opts.MaxDepth = 1
-	ctxStr, err = AssembleContext(g, "concepts/a", opts)
+	res, err = AssembleContext(g, "concepts/a", opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	ctxStr = res.Context
 	if !strings.Contains(ctxStr, `id="concepts/a"`) || !strings.Contains(ctxStr, `id="concepts/b"`) || strings.Contains(ctxStr, `id="concepts/c"`) {
 		t.Errorf("expected depth 1 to contain concept A and B, but not C. Got:\n%s", ctxStr)
 	}
 
 	// Test assembly with depth 2
 	opts.MaxDepth = 2
-	ctxStr, err = AssembleContext(g, "concepts/a", opts)
+	res, err = AssembleContext(g, "concepts/a", opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	ctxStr = res.Context
 	if !strings.Contains(ctxStr, `id="concepts/a"`) || !strings.Contains(ctxStr, `id="concepts/b"`) || !strings.Contains(ctxStr, `id="concepts/c"`) {
 		t.Errorf("expected depth 2 to contain concept A, B, and C. Got:\n%s", ctxStr)
 	}
@@ -119,10 +122,11 @@ func TestBuildGraphAndAssemble(t *testing.T) {
 	// Test budget constraints (MaxCharacters)
 	opts.MaxDepth = 2
 	opts.MaxCharacters = 500 // Too small for all three, A is around ~350 chars
-	ctxStr, err = AssembleContext(g, "concepts/a", opts)
+	res, err = AssembleContext(g, "concepts/a", opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	ctxStr = res.Context
 	if !strings.Contains(ctxStr, `id="concepts/a"`) || strings.Contains(ctxStr, `id="concepts/b"`) || strings.Contains(ctxStr, `id="concepts/c"`) {
 		t.Errorf("expected budget pruning to limit to concept A, got:\n%s", ctxStr)
 	}
@@ -158,7 +162,7 @@ func BenchmarkAssembleContext(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_, err := AssembleContext(g, "concepts/node-0", opts)
 		if err != nil {
-			b.Fatal(err)
+			b.Fatalf("benchmark failed: %v", err)
 		}
 	}
 }

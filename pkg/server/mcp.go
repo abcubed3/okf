@@ -163,12 +163,12 @@ func (s *Server) registerCapabilities() {
 		opts := assembly.DefaultOptions()
 		opts.MaxDepth = depthVal
 
-		ctxStr, err := assembly.AssembleContext(s.graph, id, opts)
+		res, err := assembly.AssembleContext(s.graph, id, opts)
 		if err != nil {
 			return nil, err
 		}
 
-		promptText := fmt.Sprintf("Analyze the following assembled context related to concept %q:\n\n%s\n\nProvide a comprehensive summary of this concept, its metadata, and how it relates to other concepts in the graph.", id, ctxStr)
+		promptText := fmt.Sprintf("Analyze the following assembled context related to concept %q:\n\n%s\n\nProvide a comprehensive summary of this concept, its metadata, and how it relates to other concepts in the graph.", id, res.Context)
 
 		return &mcp.GetPromptResult{
 			Description: fmt.Sprintf("Analysis prompt for concept %q", id),
@@ -562,7 +562,10 @@ type AssembleContextArgs struct {
 
 // AssembleContextResult contains the output text of the assembled context.
 type AssembleContextResult struct {
-	Context string `json:"context"`
+	Context         string              `json:"context"`
+	TotalTokens     int                 `json:"totalTokens"`
+	TotalCharacters int                 `json:"totalCharacters"`
+	Nodes           []assembly.NodeStat `json:"nodes"`
 }
 
 // handleAssembleContext builds a pruned, cohesive context subset starting from a concept ID.
@@ -586,7 +589,7 @@ func (s *Server) handleAssembleContext(ctx context.Context, req *mcp.CallToolReq
 		opts.Format = *args.Format
 	}
 
-	ctxStr, err := assembly.AssembleContext(s.graph, args.ID, opts)
+	res, err := assembly.AssembleContext(s.graph, args.ID, opts)
 	if err != nil {
 		return nil, AssembleContextResult{}, err
 	}
@@ -594,8 +597,13 @@ func (s *Server) handleAssembleContext(ctx context.Context, req *mcp.CallToolReq
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
 			&mcp.TextContent{
-				Text: ctxStr,
+				Text: res.Context,
 			},
 		},
-	}, AssembleContextResult{Context: ctxStr}, nil
+	}, AssembleContextResult{
+		Context:         res.Context,
+		TotalTokens:     res.TotalTokens,
+		TotalCharacters: res.TotalCharacters,
+		Nodes:           res.Nodes,
+	}, nil
 }

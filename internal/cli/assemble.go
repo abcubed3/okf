@@ -4,7 +4,9 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/abcubed3/okf/pkg/assembly"
 	"github.com/abcubed3/okf/pkg/parser"
@@ -18,6 +20,7 @@ func RunAssemble(args []string) error {
 	maxChars := fs.Int("max-chars", 16000, "Maximum character budget for assembled context (0 for unlimited)")
 	direction := fs.String("direction", "bidirectional", "Link traversal direction: 'outbound', 'inbound', or 'bidirectional'")
 	format := fs.String("format", "xml", "Output format: 'xml' or 'markdown'")
+	monitor := fs.Bool("monitor", false, "Display visual feedback showing context window consumption")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -58,11 +61,53 @@ func RunAssemble(args []string) error {
 		Format:        *format,
 	}
 
-	ctxStr, err := assembly.AssembleContext(g, startID, opts)
+	res, err := assembly.AssembleContext(g, startID, opts)
 	if err != nil {
 		return fmt.Errorf("failed to assemble context: %w", err)
 	}
 
-	fmt.Println(ctxStr)
+	if *monitor {
+		renderTokenMonitor(opts.MaxTokens, res)
+	}
+
+	fmt.Println(res.Context)
 	return nil
+}
+
+func renderTokenMonitor(maxTokens int, res *assembly.AssemblyResult) {
+	fmt.Fprintf(os.Stderr, "Token Budget Monitor (Max: %d)\n", maxTokens)
+	fmt.Fprintf(os.Stderr, "------------------------------------------------\n")
+	
+	const barWidth = 20
+	
+	for _, node := range res.Nodes {
+		pct := 0.0
+		if maxTokens > 0 {
+			pct = float64(node.Tokens) / float64(maxTokens)
+		}
+		
+		filled := int(pct * float64(barWidth))
+		if filled > barWidth {
+			filled = barWidth
+		}
+		empty := barWidth - filled
+		
+		bar := strings.Repeat("█", filled) + strings.Repeat("░", empty)
+		fmt.Fprintf(os.Stderr, "%-20s [%s] %d tokens (%.1f%%)\n", node.ID, bar, node.Tokens, pct*100)
+	}
+	
+	fmt.Fprintf(os.Stderr, "------------------------------------------------\n")
+	
+	totalPct := 0.0
+	if maxTokens > 0 {
+		totalPct = float64(res.TotalTokens) / float64(maxTokens)
+	}
+	totalFilled := int(totalPct * float64(barWidth))
+	if totalFilled > barWidth {
+		totalFilled = barWidth
+	}
+	totalEmpty := barWidth - totalFilled
+	
+	totalBar := strings.Repeat("█", totalFilled) + strings.Repeat("░", totalEmpty)
+	fmt.Fprintf(os.Stderr, "%-20s [%s] %d tokens (%.1f%%)\n\n", "Total", totalBar, res.TotalTokens, totalPct*100)
 }

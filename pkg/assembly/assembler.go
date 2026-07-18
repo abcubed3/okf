@@ -49,12 +49,27 @@ func DefaultOptions() AssemblyOptions {
 	}
 }
 
+// NodeStat represents the token and character statistics for a single concept node.
+type NodeStat struct {
+	ID         string `json:"id"`
+	Tokens     int    `json:"tokens"`
+	Characters int    `json:"characters"`
+}
+
+// AssemblyResult contains the output text and token/character statistics for each node included in the context assembly.
+type AssemblyResult struct {
+	Context         string     `json:"context"`
+	TotalTokens     int        `json:"totalTokens"`
+	TotalCharacters int        `json:"totalCharacters"`
+	Nodes           []NodeStat `json:"nodes"`
+}
+
 // AssembleContext traverses the concept graph from a start ID and builds a formatted context string.
 // It uses BFS traversal to follow links up to MaxDepth, checking against MaxCharacters/MaxTokens budgets.
-func AssembleContext(g *ConceptGraph, startID string, opts AssemblyOptions) (string, error) {
+func AssembleContext(g *ConceptGraph, startID string, opts AssemblyOptions) (*AssemblyResult, error) {
 	_, exists := g.Nodes[startID]
 	if !exists {
-		return "", fmt.Errorf("starting concept %q not found in graph", startID)
+		return nil, fmt.Errorf("starting concept %q not found in graph", startID)
 	}
 
 	// Queue for BFS: contains concept ID and current depth
@@ -71,6 +86,7 @@ func AssembleContext(g *ConceptGraph, startID string, opts AssemblyOptions) (str
 	visited[startID] = true
 
 	var formattedTexts []string
+	var nodes []NodeStat
 	charCount := 0
 	tokenCount := 0
 
@@ -95,6 +111,11 @@ func AssembleContext(g *ConceptGraph, startID string, opts AssemblyOptions) (str
 		}
 
 		formattedTexts = append(formattedTexts, conceptContent)
+		nodes = append(nodes, NodeStat{
+			ID:         item.id,
+			Tokens:     conceptTokens,
+			Characters: conceptLen,
+		})
 		charCount += conceptLen
 		tokenCount += conceptTokens
 
@@ -139,7 +160,12 @@ func AssembleContext(g *ConceptGraph, startID string, opts AssemblyOptions) (str
 		buf.WriteString("</context>\n")
 	}
 
-	return buf.String(), nil
+	return &AssemblyResult{
+		Context:         buf.String(),
+		TotalTokens:     tokenCount,
+		TotalCharacters: charCount,
+		Nodes:           nodes,
+	}, nil
 }
 
 // formatSingleConcept serializes a single Concept into markdown or XML.
