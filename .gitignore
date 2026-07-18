@@ -1,6 +1,6 @@
 # Binaries and packaging
 dist/
-okf
+/okf
 okf.exe
 *.exe
 
