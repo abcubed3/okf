@@ -21,6 +21,7 @@ builds:
       - goos: windows
         goarch: arm64
     binary: okf
+    main: ./cmd/okf
     ldflags:
       - -s -w -X main.Version={{.Version}} -X main.Commit={{.Commit}} -X main.Date={{.Date}}
 

@@ -7,10 +7,11 @@ tags: [ecommerce, sales]
 timestamp: 2026-07-14T20:00:00Z
 ---
 
-# Sales Dataset
+## Sales Dataset
 
 This dataset contains obfuscated events from the Google Analytics 4 (GA4) sample export for the Google Merchandise Store.
 
 ## Tables Included
-*   [Orders Table](../tables/orders.md)
-*   [Users Table](../tables/users.md)
+
+* [Orders Table](../tables/orders.md)
+* [Users Table](../tables/users.md)

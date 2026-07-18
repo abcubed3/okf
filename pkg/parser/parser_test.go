@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -97,7 +98,7 @@ func TestDefaultParseOptions(t *testing.T) {
 
 func TestParseBundle_EmptyDirectory(t *testing.T) {
 	dir := t.TempDir()
-	b, err := ParseBundle(dir)
+	b, err := ParseBundle(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("ParseBundle returned error on empty dir: %v", err)
 	}
@@ -117,7 +118,7 @@ func TestParseBundle_SkipsReservedFiles(t *testing.T) {
 	// Write a valid concept
 	writeMockConcept(t, dir, "tables/users.md", "---\ntype: Table\ntitle: Users\n---\n# Users")
 
-	b, err := ParseBundle(dir)
+	b, err := ParseBundle(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("ParseBundle error: %v", err)
 	}
@@ -138,7 +139,7 @@ func TestParseBundle_SkipsNonMarkdown(t *testing.T) {
 	writeMockConcept(t, dir, "config.yaml", "key: value")
 	writeMockConcept(t, dir, "tables/users.md", "---\ntype: Table\n---\n# Users")
 
-	b, err := ParseBundle(dir)
+	b, err := ParseBundle(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("ParseBundle error: %v", err)
 	}
@@ -153,7 +154,7 @@ func TestParseBundle_MultipleConcepts(t *testing.T) {
 	writeMockConcept(t, dir, "tables/orders.md", "---\ntype: PostgreSQL Table\ntitle: Orders\n---\n# Orders")
 	writeMockConcept(t, dir, "endpoints/get-users.md", "---\ntype: API Endpoint\ntitle: GET /users\n---\n# GET /users")
 
-	b, err := ParseBundle(dir)
+	b, err := ParseBundle(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("ParseBundle error: %v", err)
 	}
@@ -176,7 +177,7 @@ func TestParseBundle_ConceptIDDerivation(t *testing.T) {
 	dir := t.TempDir()
 	writeMockConcept(t, dir, "deeply/nested/concept.md", "---\ntype: Nested\n---\n# Concept")
 
-	b, err := ParseBundle(dir)
+	b, err := ParseBundle(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("ParseBundle error: %v", err)
 	}
@@ -193,7 +194,7 @@ func TestParseBundle_FileSizeLimit(t *testing.T) {
 	writeMockConcept(t, dir, "big.md", largeContent)
 
 	opts := ParseOptions{MaxFileSize: 1000}
-	b, err := ParseBundleWithOptions(dir, opts)
+	b, err := ParseBundleWithOptions(context.Background(), dir, opts)
 	if err != nil {
 		t.Fatalf("ParseBundleWithOptions error: %v", err)
 	}
@@ -211,7 +212,7 @@ func TestParseBundle_FileSizeLimit(t *testing.T) {
 }
 
 func TestParseBundle_InvalidPath(t *testing.T) {
-	_, err := ParseBundle("/nonexistent/path/that/does/not/exist")
+	_, err := ParseBundle(context.Background(), "/nonexistent/path/that/does/not/exist")
 	if err == nil {
 		t.Error("expected error for nonexistent path, got nil")
 	}
@@ -226,7 +227,7 @@ func TestParseBundle_FileNotDirectory(t *testing.T) {
 	f.Close()
 	defer os.Remove(f.Name())
 
-	_, err = ParseBundle(f.Name())
+	_, err = ParseBundle(context.Background(), f.Name())
 	if err == nil {
 		t.Error("expected error when path is a file, not a directory")
 	}
@@ -234,7 +235,7 @@ func TestParseBundle_FileNotDirectory(t *testing.T) {
 
 func TestParseBundle_BundleRootPath(t *testing.T) {
 	dir := t.TempDir()
-	b, err := ParseBundle(dir)
+	b, err := ParseBundle(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("ParseBundle error: %v", err)
 	}
@@ -274,7 +275,7 @@ func TestParseBundleWithOptions_DefaultFallback(t *testing.T) {
 	dir := t.TempDir()
 	// MaxFileSize = 0 should fall back to 10MB default
 	opts := ParseOptions{MaxFileSize: 0}
-	b, err := ParseBundleWithOptions(dir, opts)
+	b, err := ParseBundleWithOptions(context.Background(), dir, opts)
 	if err != nil {
 		t.Fatalf("ParseBundleWithOptions error: %v", err)
 	}
@@ -352,7 +353,7 @@ func BenchmarkParseBundle(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := ParseBundle(dir)
+		_, err := ParseBundle(context.Background(), dir)
 		if err != nil {
 			b.Fatal(err)
 		}

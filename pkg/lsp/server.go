@@ -4,6 +4,7 @@
 package lsp
 
 import (
+	stdcontext "context"
 	"net/url"
 	"path/filepath"
 	"strings"
@@ -37,21 +38,21 @@ func Run() {
 	s := NewServer()
 	handler := s.buildHandler()
 	srv := server.NewServer(handler, "okf-lsp", true)
-	srv.RunStdio()
+	_ = srv.RunStdio()
 }
 
 // buildHandler constructs the protocol.Handler, binding each LSP method to a
 // method on this Server instance (avoiding package-level globals).
 func (s *Server) buildHandler() *protocol.Handler {
 	return &protocol.Handler{
-		Initialize:             s.initialize,
-		Initialized:            s.initialized,
-		Shutdown:               shutdown,
-		SetTrace:               setTrace,
-		TextDocumentDidOpen:    s.textDocumentDidOpen,
-		TextDocumentDidChange:  s.textDocumentDidChange,
-		TextDocumentDidSave:    s.textDocumentDidSave,
-		TextDocumentDidClose:   s.textDocumentDidClose,
+		Initialize:            s.initialize,
+		Initialized:           s.initialized,
+		Shutdown:              shutdown,
+		SetTrace:              setTrace,
+		TextDocumentDidOpen:   s.textDocumentDidOpen,
+		TextDocumentDidChange: s.textDocumentDidChange,
+		TextDocumentDidSave:   s.textDocumentDidSave,
+		TextDocumentDidClose:  s.textDocumentDidClose,
 		// Hover and Definition are not yet implemented; we omit them from
 		// capabilities so the editor does not wait for a response that never comes.
 	}
@@ -93,7 +94,7 @@ func (s *Server) initialized(context *glsp.Context, params *protocol.Initialized
 	defer s.mu.Unlock()
 
 	if s.workspaceRoot != "" {
-		if b, err := parser.ParseBundle(s.workspaceRoot); err == nil {
+		if b, err := parser.ParseBundle(stdcontext.Background(), s.workspaceRoot); err == nil {
 			s.activeBundle = b
 		}
 	}
@@ -226,14 +227,4 @@ func uriToPath(uri string) string {
 		return path
 	}
 	return u.Path
-}
-
-// pathToURI converts an OS filesystem path to an LSP file:// URI.
-func pathToURI(path string) string {
-	// filepath.ToSlash ensures forward slashes on all platforms.
-	slashed := filepath.ToSlash(path)
-	if !strings.HasPrefix(slashed, "/") {
-		slashed = "/" + slashed
-	}
-	return "file://" + slashed
 }

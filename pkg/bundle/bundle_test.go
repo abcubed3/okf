@@ -189,6 +189,8 @@ func TestConceptParseError(t *testing.T) {
 		Path:       "bad/concept.md",
 		ParseError: "yaml: unmarshal error on line 5",
 	}
+	_ = c.ID
+	_ = c.Path
 	if c.ParseError == "" {
 		t.Error("expected ParseError to be set")
 	}

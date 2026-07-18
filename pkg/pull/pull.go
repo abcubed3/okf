@@ -28,14 +28,14 @@ func PullBundle(hubURI, host, apiKey string) error {
 	if !strings.HasPrefix(hubURI, "hub://") {
 		return fmt.Errorf("invalid URI format: must start with hub://")
 	}
-	
+
 	bundleID := strings.TrimPrefix(hubURI, "hub://")
 	// If it has multiple segments, assume the first segment is the bundle ID for now.
 	// Actually, based on previous design, bundleID can be "namespace/bundle" like "stripe/api"
 	// So we pass the entire remainder as the bundleID.
-	
+
 	apiURL := fmt.Sprintf("%s/api/concepts?bundle=%s", host, url.QueryEscape(bundleID))
-	
+
 	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
@@ -95,7 +95,7 @@ func PullBundle(hubURI, host, apiKey string) error {
 
 		content := fmt.Sprintf("---\n%s---\n\n# %s\n\n%s\n", yamlData, c.Title, c.Description)
 		filePath := filepath.Join(cacheDir, c.ID+".md")
-		
+
 		// Create subdirectories if concept ID has slashes
 		if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {
 			fmt.Printf("Failed to create directory for concept %s: %v\n", c.ID, err)

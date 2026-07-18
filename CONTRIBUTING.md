@@ -8,7 +8,7 @@ This document outlines the guidelines and workflow for contributing to OKF-go. F
 
 ## 🛠️ Getting Started
 
-### Prerequisites
+### System Requirements
 
 * Go `1.26` or higher
 

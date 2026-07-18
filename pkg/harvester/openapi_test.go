@@ -77,9 +77,10 @@ paths:
 	var getUsersConcept *bundle.Concept
 	var postUserConcept *bundle.Concept
 	for _, c := range concepts {
-		if c.ID == "endpoints/get-users" {
+		switch c.ID {
+case "endpoints/get-users":
 			getUsersConcept = c
-		} else if c.ID == "endpoints/post-users-id" {
+		case "endpoints/post-users-id":
 			postUserConcept = c
 		}
 	}

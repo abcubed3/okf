@@ -2,6 +2,7 @@ package publish
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -49,13 +50,13 @@ func PublishBundle(bundlePath, host, apiKey string) error {
 	fmt.Printf("Publishing OKF bundle at: %s to %s...\n", absPath, host)
 
 	// 1. Parse the bundle locally
-	b, err := parser.ParseBundle(absPath)
+	b, err := parser.ParseBundle(context.Background(), absPath)
 	if err != nil {
 		return fmt.Errorf("failed to parse bundle: %w", err)
 	}
 
 	bundleName := filepath.Base(b.Path)
-	
+
 	// 2. Map to PublishPayload (matches proto structure)
 	payload := PublishPayload{
 		Bundle: BundlePayload{

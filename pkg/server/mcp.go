@@ -28,13 +28,13 @@ type Server struct {
 	// Token is an optional authentication token for SSE transport.
 	Token string
 
-	mu            sync.RWMutex
+	mu sync.RWMutex
 	// bundle is the parsed OKF Bundle.
-	bundle        *bundle.Bundle
+	bundle *bundle.Bundle
 	// graph is the built relationship graph of all concepts.
-	graph         *assembly.ConceptGraph
+	graph *assembly.ConceptGraph
 	// searchTexts caches the lowercase full text for each concept to speed up searches.
-	searchTexts   map[string]string
+	searchTexts map[string]string
 }
 
 // NewMCPServer parses the OKF bundle and initializes the MCP Server.
@@ -44,7 +44,7 @@ func NewMCPServer(bundlePath string) (*Server, error) {
 		return nil, fmt.Errorf("failed to resolve absolute path of bundle: %w", err)
 	}
 
-	b, err := parser.ParseBundle(absPath)
+	b, err := parser.ParseBundle(context.Background(), absPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse OKF bundle: %w", err)
 	}
@@ -333,7 +333,7 @@ func (s *Server) reloadBundle() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	b, err := parser.ParseBundle(s.bundlePath)
+	b, err := parser.ParseBundle(context.Background(), s.bundlePath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to reload bundle: %v\n", err)
 		return
@@ -538,17 +538,17 @@ func (s *Server) handleGetConcept(ctx context.Context, req *mcp.CallToolRequest,
 	rawContent := formatRawConcept(c)
 
 	return &mcp.CallToolResult{
-		Content: []mcp.Content{
-			&mcp.TextContent{
-				Text: rawContent,
+			Content: []mcp.Content{
+				&mcp.TextContent{
+					Text: rawContent,
+				},
 			},
-		},
-	}, GetConceptResult{
-		ID:          c.ID,
-		Path:        c.Path,
-		Frontmatter: c.Frontmatter,
-		Body:        c.Body,
-	}, nil
+		}, GetConceptResult{
+			ID:          c.ID,
+			Path:        c.Path,
+			Frontmatter: c.Frontmatter,
+			Body:        c.Body,
+		}, nil
 }
 
 // AssembleContextArgs represents the parameters configuring relationship graph context building.

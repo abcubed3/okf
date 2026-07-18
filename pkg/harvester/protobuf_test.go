@@ -66,9 +66,10 @@ message CreateUserResponse {
 	var userMsg *bundle.Concept
 	var userService *bundle.Concept
 	for _, c := range concepts {
-		if c.ID == "protobuf/test.v1.user" {
+		switch c.ID {
+case "protobuf/test.v1.user":
 			userMsg = c
-		} else if c.ID == "protobuf/test.v1.userservice" {
+		case "protobuf/test.v1.userservice":
 			userService = c
 		}
 	}

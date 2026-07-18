@@ -2,10 +2,11 @@
 package generator
 
 import (
-	"io"
+	"context"
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -98,7 +99,7 @@ type templateData struct {
 // to decouple the index bundle from full-body payloads and enable dynamic fetching.
 func Generate(bundlePath, outputPath string) error {
 	// 1. Verify and parse the bundle
-	b, err := parser.ParseBundle(bundlePath)
+	b, err := parser.ParseBundle(context.Background(), bundlePath)
 	if err != nil {
 		return fmt.Errorf("failed to parse bundle: %w", err)
 	}
@@ -157,7 +158,7 @@ func Generate(bundlePath, outputPath string) error {
 		if c.ParseError != "" {
 			continue
 		}
-		
+
 		excerpt := c.Body
 		if len(excerpt) > 300 {
 			runes := []rune(excerpt)
@@ -165,7 +166,7 @@ func Generate(bundlePath, outputPath string) error {
 				excerpt = string(runes[:297]) + "..."
 			}
 		}
-		
+
 		jsonData.Concepts[id] = ConceptIndexEntry{
 			ID:          c.ID,
 			Type:        c.Frontmatter.Type,

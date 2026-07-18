@@ -4,6 +4,7 @@ package assembly
 
 import (
 	"bytes"
+	"encoding/xml"
 	"fmt"
 	"strings"
 
@@ -196,12 +197,9 @@ func formatSingleConcept(c *bundle.Concept, format string) string {
 	return buf.String()
 }
 
-// escapeXML escapes standard XML special characters.
+// escapeXML escapes standard XML special characters using the standard library.
 func escapeXML(s string) string {
-	s = strings.ReplaceAll(s, "&", "&amp;")
-	s = strings.ReplaceAll(s, "<", "&lt;")
-	s = strings.ReplaceAll(s, ">", "&gt;")
-	s = strings.ReplaceAll(s, "\"", "&quot;")
-	s = strings.ReplaceAll(s, "'", "&apos;")
-	return s
+	var buf bytes.Buffer
+	xml.EscapeText(&buf, []byte(s))
+	return buf.String()
 }

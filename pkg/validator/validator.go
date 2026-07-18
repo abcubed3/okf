@@ -59,14 +59,14 @@ func ValidateBundle(b *bundle.Bundle, opts Options) []Issue {
 	for _, c := range b.Concepts {
 		issues = append(issues, ValidateConcept(c, b, opts, rcache)...)
 	}
-	
+
 	sort.Slice(issues, func(i, j int) bool {
 		if issues[i].Path != issues[j].Path {
 			return issues[i].Path < issues[j].Path
 		}
 		return issues[i].Message < issues[j].Message
 	})
-	
+
 	return issues
 }
 
@@ -157,7 +157,7 @@ func validateLinks(c *bundle.Concept, b *bundle.Bundle, opts Options, rcache rem
 				// Offline mode or no host configured, we cannot validate
 				continue
 			}
-			
+
 			// target is like hub://stripe/api/charge or hub://postgres/ops
 			uri := strings.TrimPrefix(target, "hub://")
 			parts := strings.Split(uri, "/")
@@ -169,7 +169,7 @@ func validateLinks(c *bundle.Concept, b *bundle.Bundle, opts Options, rcache rem
 				// or if it's just 2 parts, it's just a bundle link.
 				continue // skip complex parsing validation if malformed for now
 			}
-			
+
 			var bundleID, conceptID string
 			if len(parts) > 2 {
 				conceptID = parts[len(parts)-1]
@@ -178,7 +178,7 @@ func validateLinks(c *bundle.Concept, b *bundle.Bundle, opts Options, rcache rem
 				// It's a link to a bundle, not a concept. Let's just validate the bundle exists.
 				bundleID = strings.Join(parts, "/")
 			}
-			
+
 			// Check cache
 			conceptSet, ok := rcache[bundleID]
 			if !ok {
@@ -207,7 +207,7 @@ func validateLinks(c *bundle.Concept, b *bundle.Bundle, opts Options, rcache rem
 				// Cache even on failure so we don't spam the network
 				rcache[bundleID] = conceptSet
 			}
-			
+
 			if conceptID != "" && !conceptSet[conceptID] {
 				issues = append(issues, Issue{
 					ConceptID: c.ID,
@@ -282,8 +282,6 @@ func extractLinksFromAST(body string) []string {
 
 	return targets
 }
-
-
 
 // validateCitations verifies that any local/internal citation links resolve to existing concepts in the bundle.
 func validateCitations(c *bundle.Concept, b *bundle.Bundle, opts Options, rcache remoteCache) []Issue {

@@ -20,7 +20,7 @@ tasks:
   build:
     desc: Build the binary locally
     cmds:
-      - go build -ldflags "{{.LDFLAGS}}" -o {{.BINARY_NAME}} main.go
+      - go build -ldflags "{{.LDFLAGS}}" -o {{.BINARY_NAME}} ./cmd/okf
 
   test:
     desc: Run unit tests
@@ -43,15 +43,15 @@ tasks:
     cmds:
       - mkdir -p dist/bin
       # macOS (Apple Silicon)
-      - GOOS=darwin GOARCH=arm64 go build -ldflags "{{.LDFLAGS}}" -o dist/bin/{{.BINARY_NAME}}-darwin-arm64 main.go
+      - GOOS=darwin GOARCH=arm64 go build -ldflags "{{.LDFLAGS}}" -o dist/bin/{{.BINARY_NAME}}-darwin-arm64 ./cmd/okf
       # macOS (Intel)
-      - GOOS=darwin GOARCH=amd64 go build -ldflags "{{.LDFLAGS}}" -o dist/bin/{{.BINARY_NAME}}-darwin-amd64 main.go
+      - GOOS=darwin GOARCH=amd64 go build -ldflags "{{.LDFLAGS}}" -o dist/bin/{{.BINARY_NAME}}-darwin-amd64 ./cmd/okf
       # Linux (64-bit)
-      - GOOS=linux GOARCH=amd64 go build -ldflags "{{.LDFLAGS}}" -o dist/bin/{{.BINARY_NAME}}-linux-amd64 main.go
+      - GOOS=linux GOARCH=amd64 go build -ldflags "{{.LDFLAGS}}" -o dist/bin/{{.BINARY_NAME}}-linux-amd64 ./cmd/okf
       # Linux (ARM64)
-      - GOOS=linux GOARCH=arm64 go build -ldflags "{{.LDFLAGS}}" -o dist/bin/{{.BINARY_NAME}}-linux-arm64 main.go
+      - GOOS=linux GOARCH=arm64 go build -ldflags "{{.LDFLAGS}}" -o dist/bin/{{.BINARY_NAME}}-linux-arm64 ./cmd/okf
       # Windows (64-bit)
-      - GOOS=windows GOARCH=amd64 go build -ldflags "{{.LDFLAGS}}" -o dist/bin/{{.BINARY_NAME}}-windows-amd64.exe main.go
+      - GOOS=windows GOARCH=amd64 go build -ldflags "{{.LDFLAGS}}" -o dist/bin/{{.BINARY_NAME}}-windows-amd64.exe ./cmd/okf
 
   clean:
     desc: Remove build directories and binary

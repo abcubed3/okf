@@ -152,7 +152,8 @@ func (h *OpenAPIHarvester) buildEndpointConcept(path, method string, op *openapi
 		body.WriteString(fmt.Sprintf("**Summary**: %s\n\n", op.Summary))
 	}
 	if op.Description != "" {
-		body.WriteString(op.Description + "\n\n")
+		body.WriteString(op.Description)
+		body.WriteString("\n\n")
 	}
 
 	// 1. Parameters Table

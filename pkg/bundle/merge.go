@@ -94,7 +94,7 @@ func reconcileConcepts(c1, c2 *Concept, strategy MergeStrategy) (*Concept, error
 		// Determine which concept is newer based on timestamp
 		t1, err1 := time.Parse(time.RFC3339, c1.Frontmatter.Timestamp)
 		t2, err2 := time.Parse(time.RFC3339, c2.Frontmatter.Timestamp)
-		c1IsNewer := true
+		var c1IsNewer bool
 
 		if err1 == nil && err2 == nil {
 			c1IsNewer = t1.After(t2)

@@ -14,7 +14,7 @@ task benchmark
 
 This runs all `Benchmark*` functions across every package with memory allocation profiling enabled:
 
-```
+```bash
 go test ./... -bench=. -benchmem -run=^$
 ```
 
@@ -46,7 +46,7 @@ Baseline measured on **Apple M2 Max** (`darwin/arm64`, 12 cores).
 ### `pkg/parser` — Concept Document Parser
 
 | Benchmark | Iterations | Time/op | Memory/op | Allocs/op |
-|---|---|---|---|---|
+| :--- | :--- | :--- | :--- | :--- |
 | `BenchmarkParseConceptReader` | 116,179 | **10.3 µs** | 20.9 KB | 165 |
 
 **Scenario**: Parses a single Markdown concept document with YAML frontmatter (type, title, description, tags) and a body. Tests the full `ParseConceptReader` call path.
@@ -58,7 +58,7 @@ Baseline measured on **Apple M2 Max** (`darwin/arm64`, 12 cores).
 ### `pkg/assembly` — Graph-Based Context Assembler
 
 | Benchmark | Iterations | Time/op | Memory/op | Allocs/op |
-|---|---|---|---|---|
+| :--- | :--- | :--- | :--- | :--- |
 | `BenchmarkAssembleContext` | 33,189 | **38.3 µs** | 80.6 KB | 427 |
 
 **Scenario**: BFS traversal over a 200-node graph (each concept linking to two neighbours), with `MaxDepth=3`, `MaxCharacters=16000`, bidirectional traversal, XML output format.
@@ -70,7 +70,7 @@ Baseline measured on **Apple M2 Max** (`darwin/arm64`, 12 cores).
 ### `pkg/validator` — Bundle Conformance Validator
 
 | Benchmark | Iterations | Time/op | Memory/op | Allocs/op |
-|---|---|---|---|---|
+| :--- | :--- | :--- | :--- | :--- |
 | `BenchmarkValidateBundle` | 9,643 | **125 µs** | 199.2 KB | 2,400 |
 
 **Scenario**: Full validation pass over a 100-concept bundle, where each concept includes all frontmatter fields, a body, and an outgoing markdown link forming a circular chain. Tests YAML verification, required-field checks, recommended-field warnings, and broken-link detection.
@@ -82,7 +82,7 @@ Baseline measured on **Apple M2 Max** (`darwin/arm64`, 12 cores).
 ### `pkg/bundle` — Core Bundle Queries
 
 | Benchmark | Iterations | Time/op | Memory/op | Allocs/op |
-|---|---|---|---|---|
+| :--- | :--- | :--- | :--- | :--- |
 | `BenchmarkBundleListTypes` | 638,608 | **1.8 µs** | 32 B | 1 |
 | `BenchmarkBundleListTags` | 238,450 | **5.1 µs** | 1.6 KB | 6 |
 | `BenchmarkBundleConceptsByType` | 424,624 | **2.9 µs** | 1.07 KB | 9 |
@@ -96,7 +96,7 @@ Baseline measured on **Apple M2 Max** (`darwin/arm64`, 12 cores).
 ### `pkg/export` — JSON-LD Serializer
 
 | Benchmark | Iterations | Time/op | Memory/op | Allocs/op |
-|---|---|---|---|---|
+| :--- | :--- | :--- | :--- | :--- |
 | `BenchmarkExportBundleToJSONLD` | 11,061 | **106 µs** | 66.2 KB | 356 |
 
 **Scenario**: Serializes a 50-concept bundle containing a mix of Datasets (including parsing markdown schema tables), WebAPIs, and TechArticles into schema.org JSON-LD graph representation.
@@ -108,7 +108,7 @@ Baseline measured on **Apple M2 Max** (`darwin/arm64`, 12 cores).
 ### `pkg/generator` — Documentation Portal Compiler
 
 | Benchmark | Iterations | Time/op | Memory/op | Allocs/op |
-|---|---|---|---|---|
+| :--- | :--- | :--- | :--- | :--- |
 | `BenchmarkGenerate` | 772 | **1.6 ms** | 483 KB | 2,202 |
 
 **Scenario**: Compiles a static HTML documentation portal with full-text search index, metadata graphs, and templates from a multi-concept knowledge bundle directory on disk to a temporary output folder.

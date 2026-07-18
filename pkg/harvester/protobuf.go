@@ -131,7 +131,8 @@ func (h *ProtobufHarvester) buildMessageConcept(pkg string, fd linker.File, msg 
 
 	desc := getComments(fd, msg)
 	if desc != "" {
-		body.WriteString(desc + "\n\n")
+		body.WriteString(desc)
+		body.WriteString("\n\n")
 	}
 
 	body.WriteString("## Fields\n")
@@ -214,7 +215,8 @@ func (h *ProtobufHarvester) buildServiceConcept(pkg string, fd linker.File, srv 
 
 	desc := getComments(fd, srv)
 	if desc != "" {
-		body.WriteString(desc + "\n\n")
+		body.WriteString(desc)
+		body.WriteString("\n\n")
 	}
 
 	body.WriteString("## RPC Methods\n")
@@ -236,8 +238,8 @@ func (h *ProtobufHarvester) buildServiceConcept(pkg string, fd linker.File, srv 
 
 		body.WriteString(fmt.Sprintf("| %s | [%s](%s) | [%s](%s) | %s |\n",
 			rName,
-			reqFQN, resolveProtoLink(pkg, reqFQN),
-			respFQN, resolveProtoLink(pkg, respFQN),
+			reqFQN, resolveProtoLink(reqFQN),
+			respFQN, resolveProtoLink(respFQN),
 			rDesc))
 	}
 	body.WriteString("\n")
@@ -274,7 +276,7 @@ func (h *ProtobufHarvester) buildServiceConcept(pkg string, fd linker.File, srv 
 }
 
 // resolveProtoLink generates target concept file names for links between protobuf components.
-func resolveProtoLink(pkg, fqn string) string {
+func resolveProtoLink(fqn string) string {
 	return strings.ToLower(fqn) + ".md"
 }
 

@@ -151,7 +151,8 @@ func TestParseColumnsFromMarkdown(t *testing.T) {
 func makeLargeExportBundle() *bundle.Bundle {
 	b := bundle.NewBundle("/test-export")
 	for i := 0; i < 50; i++ {
-		if i%3 == 0 {
+		switch i % 3 {
+		case 0:
 			id := fmt.Sprintf("tables/users-%d", i)
 			b.Concepts[id] = &bundle.Concept{
 				ID:   id,
@@ -175,7 +176,7 @@ Stores user accounts.
 | email | character varying | NO | | User email |
 `,
 			}
-		} else if i%3 == 1 {
+		case 1:
 			id := fmt.Sprintf("endpoints/create-user-%d", i)
 			b.Concepts[id] = &bundle.Concept{
 				ID:   id,
@@ -190,7 +191,7 @@ Stores user accounts.
 				},
 				Body: `# POST /users`,
 			}
-		} else {
+		default:
 			id := fmt.Sprintf("playbooks/deploy-%d", i)
 			b.Concepts[id] = &bundle.Concept{
 				ID:   id,

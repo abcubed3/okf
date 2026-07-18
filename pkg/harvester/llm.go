@@ -66,7 +66,7 @@ func (c *LLMClassifier) Classify(ctx context.Context, title, body string) (bundl
 	}
 
 	prompt := fmt.Sprintf("Classify the following web documentation into an OKF Frontmatter metadata structure.\n\nTitle: %s\n\nContent:\n%s", title, body)
-	
+
 	resp, err := c.model.GenerateContent(ctx, genai.Text(prompt))
 	if err != nil {
 		return bundle.Frontmatter{}, fmt.Errorf("generation error: %w", err)

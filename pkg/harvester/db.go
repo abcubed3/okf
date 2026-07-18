@@ -119,7 +119,8 @@ func (h *DBHarvester) buildTableConcept(
 
 	// Description
 	if table.Description != "" {
-		body.WriteString(table.Description + "\n\n")
+		body.WriteString(table.Description)
+		body.WriteString("\n\n")
 	} else {
 		body.WriteString(fmt.Sprintf("Metadata representation of the %s table.\n\n", table.Name))
 	}

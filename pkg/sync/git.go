@@ -258,7 +258,7 @@ func (c *GitConnector) Pull(ctx context.Context) ([]*bundle.Concept, error) {
 	}
 
 	// Parse all concepts in the pulled bundle subfolder
-	b, err := parser.ParseBundle(pullDir)
+	b, err := parser.ParseBundle(context.Background(), pullDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse pulled bundle from %s: %w", pullDir, err)
 	}

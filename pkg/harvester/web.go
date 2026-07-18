@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/PuerkitoBio/goquery"
 	md "github.com/JohannesKaufmann/html-to-markdown"
+	"github.com/PuerkitoBio/goquery"
 	"github.com/abcubed3/okf/pkg/bundle"
 	"github.com/gocolly/colly/v2"
 )
@@ -85,7 +85,7 @@ func (h *WebHarvester) Harvest(ctx context.Context) ([]*bundle.Concept, error) {
 		} else if strings.HasSuffix(urlPath, "/") {
 			urlPath = urlPath + "index"
 		}
-		
+
 		id := "web/" + urlPath
 		path := id + ".md"
 
@@ -97,8 +97,8 @@ func (h *WebHarvester) Harvest(ctx context.Context) ([]*bundle.Concept, error) {
 				fmt.Printf("Warning: LLM classification failed for %s: %v\n", e.Request.URL, llmErr)
 				// Fallback
 				fm = bundle.Frontmatter{
-					Type:      "Documentation",
-					Title:     title,
+					Type:  "Documentation",
+					Title: title,
 				}
 			} else {
 				fm = extractedFm
@@ -130,7 +130,7 @@ func (h *WebHarvester) Harvest(ctx context.Context) ([]*bundle.Concept, error) {
 		doc.Find("a[href]").Each(func(i int, s *goquery.Selection) {
 			link, exists := s.Attr("href")
 			if exists {
-				e.Request.Visit(link)
+				_ = e.Request.Visit(link)
 			}
 		})
 	})

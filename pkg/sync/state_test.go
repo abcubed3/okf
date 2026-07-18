@@ -258,7 +258,7 @@ type mockConnector struct {
 	pullRet []*bundle.Concept
 }
 
-func (m *mockConnector) Name() string { return m.name }
+func (m *mockConnector) Name() string                                  { return m.name }
 func (m *mockConnector) Initialize(_ context.Context, _ *Config) error { return nil }
 func (m *mockConnector) Push(_ context.Context, concepts []*bundle.Concept) error {
 	m.pushed = append(m.pushed, concepts...)

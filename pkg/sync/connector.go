@@ -10,10 +10,10 @@ import (
 type Connector interface {
 	// Initialize sets up the connector with the given configuration.
 	Initialize(ctx context.Context, cfg *Config) error
-	
+
 	// Push syncs concepts from OKF to the external system.
 	Push(ctx context.Context, concepts []*bundle.Concept) error
-	
+
 	// Pull fetches updates from the external system into OKF format.
 	Pull(ctx context.Context) ([]*bundle.Concept, error)
 

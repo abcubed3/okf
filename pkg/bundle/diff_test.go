@@ -40,7 +40,7 @@ func TestDiff(t *testing.T) {
 		Frontmatter: Frontmatter{
 			Type:  "PostgreSQL Table",
 			Title: "Users Table",
-			Desc:  "Stores active user accounts", // drifted description
+			Desc:  "Stores active user accounts",         // drifted description
 			Tags:  []string{"auth", "profile", "active"}, // drifted tags
 			Extra: map[string]interface{}{"schema": "public"},
 		},

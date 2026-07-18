@@ -105,7 +105,7 @@ func (e *Engine) syncOnce(ctx context.Context) error {
 	log.Println("Starting sync cycle...")
 
 	// 1. Parse the local bundle.
-	parsedBundle, err := parser.ParseBundle(e.bundlePath)
+	parsedBundle, err := parser.ParseBundle(ctx, e.bundlePath)
 	if err != nil {
 		return fmt.Errorf("failed to parse local bundle: %w", err)
 	}

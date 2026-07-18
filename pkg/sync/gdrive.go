@@ -46,7 +46,11 @@ func (c *GoogleDriveConnector) Initialize(ctx context.Context, cfg *Config) erro
 	c.config = cfg.Connectors.GoogleDrive
 
 	if c.config.ServiceAccount != "" {
-		srv, err := drive.NewService(ctx, option.WithCredentialsFile(c.config.ServiceAccount))
+		creds, err := os.ReadFile(c.config.ServiceAccount)
+		if err != nil {
+			return fmt.Errorf("unable to read service account credentials file: %w", err)
+		}
+		srv, err := drive.NewService(ctx, option.WithCredentialsJSON(creds))
 		if err != nil {
 			return fmt.Errorf("unable to retrieve Drive client via service account: %v", err)
 		}

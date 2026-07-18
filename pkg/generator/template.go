@@ -2,1296 +2,1395 @@
 package generator
 
 // HTMLTemplate is the single-page HTML, CSS, and JS application template for rendering
-// the interactive documentation catalog. It includes search, type/tag filters, visual
-// relationship graphs via vis.js, and support for theme toggle mode.
+// the interactive documentation catalog. It follows the viz.html design pattern from
+// https://github.com/GoogleCloudPlatform/knowledge-catalog/tree/main/okf/bundles —
+// using Cytoscape.js for graph rendering as the primary navigation interface, a sidebar
+// for list-based navigation, and a right-hand detail panel for concept content.
 const HTMLTemplate = `<!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{.Title}} — OKF Documentation</title>
-    
+
     {{.JSONLD}}
-    
+
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
-    
-    <!-- Dependencies via CDN — version-pinned with SRI hashes for supply-chain security -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+
+    <!-- Cytoscape.js — graph rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
+    <!-- marked.js — markdown rendering (SRI-pinned) -->
     <script src="https://cdn.jsdelivr.net/npm/marked@4.3.0/marked.min.js"
             integrity="sha256-xoB1Zy2Xbkd3OQVguqESGUhVvUQEsTZH2khVquH5Ngw="
             crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/vis-network@9.1.9/standalone/umd/vis-network.min.js"
-            integrity="sha256-9T+DPdub+X7+hWuwY31P6I8545mZx+lKS4r8jeihouU="
-            crossorigin="anonymous"></script>
-    
+
     <style>
+        /* ── Reset & Box Model ──────────────────────────────────── */
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        /* ── Design Tokens ──────────────────────────────────────── */
         :root {
-            --bg-primary: #f8fafc;
-            --bg-secondary: #ffffff;
-            --bg-sidebar: #f1f5f9;
-            --border-color: #e2e8f0;
-            --text-primary: #0f172a;
-            --text-secondary: #475569;
-            --accent-color: #3b82f6;
-            --accent-hover: #2563eb;
-            --accent-light: #eff6ff;
-            --code-bg: #f8fafc;
-            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-            --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-            
-            /* Type Colors */
-            --color-dataset: #3b82f6;
-            --color-table: #10b981;
-            --color-metric: #f59e0b;
-            --color-playbook: #8b5cf6;
-            --color-default: #64748b;
+            --bg:        #f8fafc;
+            --surface:   #ffffff;
+            --border:    #e2e8f0;
+            --text:      #0f172a;
+            --muted:     #64748b;
+            --accent:    #2563eb;
+            --accent-bg: #eff6ff;
+            --code-bg:   #f1f5f9;
+            --shadow:    0 1px 3px rgba(0,0,0,0.08);
+            --radius:    6px;
+            --sidebar-w: 260px;
+
+            /* Type colors — matches viz.html palette */
+            --c-dataset:   #8b5cf6;
+            --c-table:     #3b82f6;
+            --c-metric:    #10b981;
+            --c-reference: #10b981;
+            --c-playbook:  #f59e0b;
+            --c-default:   #94a3b8;
         }
 
-        .dark {
-            --bg-primary: #0f172a;
-            --bg-secondary: #1e293b;
-            --bg-sidebar: #0f172a;
-            --border-color: #334155;
-            --text-primary: #f8fafc;
-            --text-secondary: #94a3b8;
-            --accent-color: #3b82f6;
-            --accent-hover: #60a5fa;
-            --accent-light: #1e293b;
-            --code-bg: #0f172a;
-            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.5);
-            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
+        html.dark {
+            --bg:        #0f172a;
+            --surface:   #1e293b;
+            --border:    #334155;
+            --text:      #f1f5f9;
+            --muted:     #94a3b8;
+            --accent:    #60a5fa;
+            --accent-bg: #1e3a5f;
+            --code-bg:   #0f172a;
+            --shadow:    0 1px 3px rgba(0,0,0,0.4);
         }
 
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
+        /* ── Base ───────────────────────────────────────────────── */
         body {
-            font-family: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background-color: var(--bg-primary);
-            color: var(--text-primary);
-            height: 100vh;
-            overflow: hidden;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+            font-size: 14px;
+            color: var(--text);
+            background: var(--bg);
             display: flex;
             flex-direction: column;
-            transition: var(--transition);
-        }
-
-        /* Layout */
-        .app-container {
-            display: flex;
-            flex: 1;
+            height: 100vh;
             overflow: hidden;
-            position: relative;
         }
 
-        /* Top Header */
+        /* ── Header ─────────────────────────────────────────────── */
         header {
             display: flex;
             align-items: center;
-            justify-content: space-between;
-            padding: 0.75rem 1.5rem;
-            background-color: var(--bg-secondary);
-            border-bottom: 1px solid var(--border-color);
+            gap: 10px;
+            padding: 8px 16px;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+            box-shadow: var(--shadow);
             z-index: 10;
-            box-shadow: var(--shadow-sm);
-        }
-
-        .logo-area {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
         }
 
         .logo-badge {
-            background: linear-gradient(135deg, var(--accent-color), var(--color-playbook));
-            color: white;
+            background: linear-gradient(135deg, var(--accent), var(--c-dataset));
+            color: #fff;
             font-weight: 700;
-            padding: 0.25rem 0.6rem;
-            border-radius: 6px;
-            font-size: 0.85rem;
-            letter-spacing: 0.05em;
+            font-size: 11px;
+            letter-spacing: 0.06em;
+            padding: 3px 8px;
+            border-radius: var(--radius);
+            flex-shrink: 0;
         }
 
-        .logo-title {
-            font-size: 1.25rem;
+        .bundle-name {
+            font-size: 15px;
             font-weight: 600;
-            letter-spacing: -0.02em;
+            color: var(--text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 200px;
         }
+
+        .header-spacer { flex: 1; }
 
         .header-controls {
             display: flex;
             align-items: center;
-            gap: 1rem;
+            gap: 8px;
         }
 
-        /* Theme Toggle */
-        .btn-icon {
-            background: none;
-            border: 1px solid var(--border-color);
-            color: var(--text-secondary);
+        .ctrl-label {
+            font-size: 12px;
+            color: var(--muted);
+            white-space: nowrap;
+        }
+
+        select.ctrl-select,
+        button.ctrl-btn {
+            font-family: inherit;
+            font-size: 12px;
+            padding: 4px 8px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--surface);
+            color: var(--text);
             cursor: pointer;
-            padding: 0.5rem;
-            border-radius: 8px;
+            transition: border-color 0.15s, background 0.15s;
+        }
+
+        select.ctrl-select:hover, button.ctrl-btn:hover,
+        select.ctrl-select:focus, button.ctrl-btn:focus {
+            outline: none;
+            border-color: var(--accent);
+            background: var(--accent-bg);
+        }
+
+        button.icon-btn {
+            background: none;
+            border: 1px solid var(--border);
+            color: var(--muted);
+            cursor: pointer;
+            padding: 5px;
+            border-radius: var(--radius);
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: var(--transition);
+            transition: background 0.15s, color 0.15s, border-color 0.15s;
         }
 
-        .btn-icon:hover {
-            background-color: var(--accent-light);
-            color: var(--accent-color);
-            border-color: var(--accent-color);
+        button.icon-btn:hover {
+            background: var(--accent-bg);
+            color: var(--accent);
+            border-color: var(--accent);
         }
 
-        /* Sidebar styling */
+        /* ── App Shell ──────────────────────────────────────────── */
+        .app {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* ── Sidebar ────────────────────────────────────────────── */
         aside {
-            width: 320px;
-            background-color: var(--bg-sidebar);
-            border-right: 1px solid var(--border-color);
+            width: var(--sidebar-w);
+            flex-shrink: 0;
+            background: var(--surface);
+            border-right: 1px solid var(--border);
             display: flex;
             flex-direction: column;
-            flex-shrink: 0;
-            overflow-y: auto;
+            overflow: hidden;
         }
 
-        .sidebar-section {
-            padding: 1.25rem;
-            border-bottom: 1px solid var(--border-color);
+        .sidebar-top {
+            padding: 10px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
         }
 
         /* Search */
-        .search-container {
-            position: relative;
-        }
-
-        .search-input {
-            width: 100%;
-            padding: 0.6rem 1rem 0.6rem 2.25rem;
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            background-color: var(--bg-secondary);
-            color: var(--text-primary);
-            font-family: inherit;
-            font-size: 0.9rem;
-            transition: var(--transition);
-        }
-
-        .search-input:focus {
-            outline: none;
-            border-color: var(--accent-color);
-            box-shadow: 0 0 0 2px var(--accent-light);
-        }
+        .search-wrap { position: relative; }
 
         .search-icon {
             position: absolute;
-            left: 0.75rem;
+            left: 8px;
             top: 50%;
             transform: translateY(-50%);
-            color: var(--text-secondary);
+            color: var(--muted);
             pointer-events: none;
-            width: 16px;
-            height: 16px;
         }
 
-        /* Navigation Groups */
-        .nav-tree {
-            padding: 1rem;
-            display: flex;
-            flex-direction: column;
-            gap: 1.25rem;
+        input#search {
+            width: 100%;
+            padding: 5px 8px 5px 28px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--bg);
+            color: var(--text);
+            font-family: inherit;
+            font-size: 13px;
+            transition: border-color 0.15s;
+        }
+
+        input#search:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        /* Type filter */
+        select#filter-type {
+            width: 100%;
+            padding: 4px 8px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--bg);
+            color: var(--text);
+            font-family: inherit;
+            font-size: 12px;
+            cursor: pointer;
+            transition: border-color 0.15s;
+        }
+
+        select#filter-type:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        /* Nav tree */
+        nav#nav-tree {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
         }
 
         .nav-group-title {
-            font-size: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
             font-weight: 700;
             text-transform: uppercase;
-            letter-spacing: 0.05em;
-            color: var(--text-secondary);
-            margin-bottom: 0.5rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
+            letter-spacing: 0.06em;
+            color: var(--muted);
+            padding: 8px 4px 4px;
         }
 
-        .nav-group-dot {
-            width: 8px;
-            height: 8px;
+        .nav-dot {
+            width: 7px;
+            height: 7px;
             border-radius: 50%;
+            flex-shrink: 0;
         }
 
-        .nav-list {
-            list-style: none;
-            display: flex;
-            flex-direction: column;
-            gap: 0.25rem;
-        }
+        .nav-list { list-style: none; margin-bottom: 4px; }
 
-        .nav-item-link {
+        .nav-item {
             display: flex;
             align-items: center;
-            justify-content: space-between;
-            padding: 0.5rem 0.75rem;
-            border-radius: 6px;
-            color: var(--text-secondary);
-            text-decoration: none;
-            font-size: 0.9rem;
+            gap: 6px;
+            padding: 4px 6px;
+            border-radius: var(--radius);
+            cursor: pointer;
+            color: var(--muted);
+            font-size: 13px;
+            transition: background 0.1s, color 0.1s;
+            user-select: none;
+        }
+
+        .nav-item:hover { background: var(--bg); color: var(--text); }
+
+        .nav-item.active {
+            background: var(--accent-bg);
+            color: var(--accent);
             font-weight: 500;
-            transition: var(--transition);
         }
 
-        .nav-item-link:hover, .nav-item-link.active {
-            background-color: var(--bg-secondary);
-            color: var(--text-primary);
-            box-shadow: var(--shadow-sm);
-        }
-
-        .nav-item-link.active {
-            border-left: 3px solid var(--accent-color);
-            padding-left: calc(0.75rem - 3px);
-        }
-
-        .nav-item-title {
-            white-space: nowrap;
+        .nav-item-label {
+            flex: 1;
             overflow: hidden;
             text-overflow: ellipsis;
-            max-width: 80%;
+            white-space: nowrap;
         }
 
-        .nav-item-badge {
-            font-size: 0.7rem;
-            padding: 0.1rem 0.4rem;
+        .nav-tag {
+            font-size: 10px;
+            background: var(--border);
+            color: var(--muted);
             border-radius: 10px;
-            background-color: var(--border-color);
-            color: var(--text-secondary);
+            padding: 1px 5px;
+            flex-shrink: 0;
         }
 
-        /* Main Workspace */
-        main {
-            flex: 1;
+        .nav-empty {
+            color: var(--muted);
+            font-size: 12px;
+            text-align: center;
+            padding: 16px 8px;
+        }
+
+        /* Sidebar footer — log button */
+        .sidebar-footer {
+            padding: 8px 10px;
+            border-top: 1px solid var(--border);
+        }
+
+        button.log-btn {
+            width: 100%;
             display: flex;
-            flex-direction: column;
-            overflow: hidden;
-            background-color: var(--bg-primary);
-        }
-
-        .tab-bar {
-            display: flex;
-            background-color: var(--bg-secondary);
-            border-bottom: 1px solid var(--border-color);
-            padding: 0 1rem;
-        }
-
-        .tab-button {
-            padding: 0.85rem 1.25rem;
-            border: none;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 8px;
             background: none;
-            color: var(--text-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            color: var(--muted);
             font-family: inherit;
-            font-weight: 600;
-            font-size: 0.9rem;
+            font-size: 12px;
             cursor: pointer;
-            border-bottom: 2px solid transparent;
-            transition: var(--transition);
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
+            transition: background 0.15s, color 0.15s, border-color 0.15s;
         }
 
-        .tab-button:hover {
-            color: var(--text-primary);
+        button.log-btn:hover {
+            background: var(--accent-bg);
+            color: var(--accent);
+            border-color: var(--accent);
         }
 
-        .tab-button.active {
-            color: var(--accent-color);
-            border-bottom-color: var(--accent-color);
-        }
-
-        /* Tab Content panels */
-        .tab-panel {
+        /* ── Main (Graph + Detail) ──────────────────────────────── */
+        .main {
             flex: 1;
-            overflow-y: auto;
-            display: none;
-            padding: 2rem;
+            display: flex;
+            overflow: hidden;
+            min-width: 0;
+        }
+
+        /* ── Graph ──────────────────────────────────────────────── */
+        #graph {
+            flex: 1 1 60%;
+            background: var(--bg);
+            border-right: 1px solid var(--border);
             position: relative;
+            min-width: 0;
         }
 
-        .tab-panel.active {
-            display: block;
-        }
-
-        /* Content Render Styles */
-        .concept-header {
-            margin-bottom: 1.5rem;
-            border-bottom: 1px solid var(--border-color);
-            padding-bottom: 1.5rem;
-        }
-
-        .concept-title-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            flex-wrap: wrap;
-            gap: 1rem;
-            margin-bottom: 0.75rem;
-        }
-
-        .concept-title {
-            font-size: 2.25rem;
-            font-weight: 700;
-            letter-spacing: -0.03em;
-        }
-
-        .concept-meta {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.75rem;
-            align-items: center;
-        }
-
-        .badge-type {
-            font-size: 0.75rem;
-            font-weight: 600;
-            padding: 0.25rem 0.75rem;
-            border-radius: 9999px;
-            color: white;
-        }
-
-        .badge-resource {
-            background-color: var(--accent-light);
-            color: var(--accent-color);
-            border: 1px solid var(--border-color);
-            font-family: 'Fira Code', monospace;
-            font-size: 0.75rem;
-            padding: 0.2rem 0.5rem;
-            border-radius: 4px;
-        }
-
-        .tag-list {
-            display: flex;
-            gap: 0.4rem;
-        }
-
-        .tag-badge {
-            font-size: 0.7rem;
-            background-color: var(--border-color);
-            color: var(--text-secondary);
-            padding: 0.15rem 0.5rem;
-            border-radius: 12px;
-        }
-
-        /* Markdown rendering overrides */
-        .markdown-body {
-            line-height: 1.625;
-            font-size: 1.05rem;
-            color: var(--text-primary);
-        }
-
-        .markdown-body h1, .markdown-body h2, .markdown-body h3 {
-            margin-top: 1.5rem;
-            margin-bottom: 0.75rem;
-            font-weight: 600;
-            letter-spacing: -0.01em;
-        }
-
-        .markdown-body h1 { font-size: 1.75rem; }
-        .markdown-body h2 { font-size: 1.4rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.3rem; }
-        .markdown-body h3 { font-size: 1.2rem; }
-
-        .markdown-body p {
-            margin-bottom: 1rem;
-        }
-
-        .markdown-body a {
-            color: var(--accent-color);
-            text-decoration: none;
-            border-bottom: 1px dashed var(--accent-color);
-            transition: var(--transition);
-        }
-
-        .markdown-body a:hover {
-            color: var(--accent-hover);
-            border-bottom-style: solid;
-        }
-
-        .markdown-body ul, .markdown-body ol {
-            margin-bottom: 1rem;
-            padding-left: 1.5rem;
-        }
-
-        .markdown-body li {
-            margin-bottom: 0.25rem;
-        }
-
-        .markdown-body code {
-            font-family: 'Fira Code', monospace;
-            background-color: var(--code-bg);
-            padding: 0.15rem 0.3rem;
-            border-radius: 4px;
-            font-size: 0.85em;
-            border: 1px solid var(--border-color);
-        }
-
-        .markdown-body pre {
-            background-color: var(--code-bg);
-            padding: 1rem;
-            border-radius: 8px;
-            overflow-x: auto;
-            border: 1px solid var(--border-color);
-            margin-bottom: 1rem;
-        }
-
-        .markdown-body pre code {
-            background-color: transparent;
-            padding: 0;
-            border: none;
-            font-size: 0.9rem;
-        }
-
-        .markdown-body blockquote {
-            border-left: 4px solid var(--accent-color);
-            padding-left: 1rem;
-            color: var(--text-secondary);
-            font-style: italic;
-            margin-bottom: 1rem;
-        }
-
-        .markdown-body table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 1rem;
-        }
-
-        .markdown-body th, .markdown-body td {
-            border: 1px solid var(--border-color);
-            padding: 0.5rem 0.75rem;
-            text-align: left;
-        }
-
-        .markdown-body th {
-            background-color: var(--bg-sidebar);
-            font-weight: 600;
-        }
-
-        /* Alert styling */
-        .markdown-body blockquote.alert {
-            border-left-width: 4px;
-            padding: 0.75rem 1rem;
-            margin-bottom: 1rem;
-            font-style: normal;
-            border-radius: 0 6px 6px 0;
-        }
-        
-        .markdown-body blockquote.alert-note {
-            border-left-color: #3b82f6;
-            background-color: rgba(59, 130, 246, 0.05);
-        }
-        
-        .markdown-body blockquote.alert-tip {
-            border-left-color: #10b981;
-            background-color: rgba(16, 185, 129, 0.05);
-        }
-        
-        .markdown-body blockquote.alert-important {
-            border-left-color: #8b5cf6;
-            background-color: rgba(139, 92, 246, 0.05);
-        }
-        
-        .markdown-body blockquote.alert-warning {
-            border-left-color: #f59e0b;
-            background-color: rgba(245, 158, 11, 0.05);
-        }
-        
-        .markdown-body blockquote.alert-caution {
-            border-left-color: #ef4444;
-            background-color: rgba(239, 68, 68, 0.05);
-        }
-
-        /* Graph Panel */
-        #graph-container {
-            width: 100%;
-            height: 100%;
-            min-height: 500px;
-            background-color: var(--bg-primary);
-        }
-
-        /* Hover Tooltip/Card */
-        .hover-card {
+        .graph-hint {
             position: absolute;
-            background-color: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 0.75rem 1rem;
-            max-width: 280px;
-            box-shadow: var(--shadow-md);
+            bottom: 12px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 11px;
+            color: var(--muted);
+            background: var(--surface);
+            border: 1px solid var(--border);
+            padding: 4px 12px;
+            border-radius: 20px;
             pointer-events: none;
-            display: none;
-            z-index: 1000;
-            animation: fadeIn 0.15s ease-out;
+            white-space: nowrap;
+            box-shadow: var(--shadow);
         }
 
-        .hover-card-title {
-            font-weight: 600;
-            font-size: 0.95rem;
-            margin-bottom: 0.25rem;
+        /* ── Detail Panel ───────────────────────────────────────── */
+        #detail {
+            flex: 0 0 40%;
+            overflow-y: auto;
+            background: var(--surface);
+            min-width: 280px;
         }
 
-        .hover-card-meta {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            margin-bottom: 0.5rem;
-        }
-
-        .hover-card-desc {
-            font-size: 0.8rem;
-            color: var(--text-secondary);
-            line-height: 1.4;
-        }
-
-        /* Empty State */
-        .empty-state {
+        #detail-empty {
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             height: 100%;
-            color: var(--text-secondary);
+            gap: 12px;
+            padding: 2rem;
             text-align: center;
-            gap: 1rem;
+            color: var(--muted);
         }
 
-        .empty-state-icon {
-            font-size: 3rem;
+        #detail-empty .empty-icon { font-size: 2.5rem; }
+        #detail-empty p { font-size: 13px; line-height: 1.55; }
+
+        /* Log overlay inside detail panel */
+        #log-overlay {
+            display: none;
+            padding: 20px 24px;
         }
 
-        /* Responsive adjustments */
-        @media (max-width: 768px) {
-            .app-container {
-                flex-direction: column;
-            }
-            aside {
-                width: 100%;
-                height: 250px;
-                border-right: none;
-                border-bottom: 1px solid var(--border-color);
-            }
+        .log-overlay-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 14px;
         }
 
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(4px); }
-            to { opacity: 1; transform: translateY(0); }
+        .log-overlay-header h2 {
+            font-size: 14px;
+            font-weight: 600;
+            flex: 1;
         }
 
-        @keyframes spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
+        button.close-log {
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: var(--muted);
+            font-size: 20px;
+            line-height: 1;
+            padding: 0;
+            display: flex;
+            align-items: center;
+        }
+
+        button.close-log:hover { color: var(--text); }
+
+        /* Concept article */
+        article#detail-content {
+            padding: 20px 24px;
+        }
+
+        /* ── Detail: Type chip + Header ─────────────────────────── */
+        .detail-header { margin-bottom: 12px; }
+
+        .type-chip {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 600;
+            color: #fff;
+            background: var(--c-default);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+
+        .detail-header h1 {
+            font-size: 18px;
+            font-weight: 600;
+            line-height: 1.3;
+            color: var(--text);
+            margin-bottom: 3px;
+        }
+
+        .detail-id {
+            font-family: 'Fira Code', ui-monospace, monospace;
+            font-size: 11px;
+            color: var(--muted);
+        }
+
+        /* ── Frontmatter dl — viz.html style ────────────────────── */
+        dl.frontmatter {
+            display: grid;
+            grid-template-columns: 90px 1fr;
+            row-gap: 5px;
+            column-gap: 12px;
+            margin: 10px 0 14px;
+            font-size: 13px;
+        }
+
+        dl.frontmatter dt {
+            color: var(--muted);
+            font-weight: 500;
+            align-self: start;
+            padding-top: 1px;
+        }
+
+        dl.frontmatter dd { margin: 0; word-break: break-word; }
+
+        dl.frontmatter a {
+            color: var(--accent);
+            word-break: break-all;
+            font-size: 12px;
+            font-family: 'Fira Code', ui-monospace, monospace;
+        }
+
+        .tag {
+            display: inline-block;
+            padding: 1px 6px;
+            margin: 0 4px 3px 0;
+            border-radius: 4px;
+            background: var(--code-bg);
+            color: var(--muted);
+            font-size: 11px;
+            border: 1px solid var(--border);
+        }
+
+        hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
+
+        /* ── Markdown Body ──────────────────────────────────────── */
+        .markdown-body {
+            font-size: 13px;
+            line-height: 1.6;
+            color: var(--text);
+        }
+
+        .markdown-body h1 { font-size: 16px; margin: 18px 0 6px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
+        .markdown-body h2 { font-size: 14px; margin: 14px 0 4px; font-weight: 600; }
+        .markdown-body h3 { font-size: 13px; margin: 12px 0 4px; font-weight: 600; }
+        .markdown-body p  { margin: 6px 0; }
+
+        .markdown-body a { color: var(--accent); }
+        .markdown-body a.internal { cursor: pointer; text-decoration: underline; }
+
+        .markdown-body code {
+            background: var(--code-bg);
+            padding: 1px 4px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-family: 'Fira Code', ui-monospace, monospace;
+            border: 1px solid var(--border);
+        }
+
+        .markdown-body pre {
+            background: var(--code-bg);
+            padding: 10px 12px;
+            border-radius: var(--radius);
+            overflow-x: auto;
+            font-size: 12px;
+            border: 1px solid var(--border);
+            margin: 8px 0;
+        }
+
+        .markdown-body pre code { background: transparent; border: none; padding: 0; }
+
+        .markdown-body ul, .markdown-body ol { padding-left: 22px; margin: 6px 0; }
+        .markdown-body li { margin: 2px 0; }
+
+        .markdown-body blockquote {
+            border-left: 3px solid var(--accent);
+            padding-left: 10px;
+            color: var(--muted);
+            margin: 8px 0;
+            font-style: italic;
+        }
+
+        .markdown-body blockquote.alert {
+            font-style: normal;
+            padding: 8px 12px;
+            border-radius: 0 var(--radius) var(--radius) 0;
+        }
+
+        .markdown-body blockquote.alert-note      { border-left-color: #3b82f6; background: rgba(59,130,246,0.06); }
+        .markdown-body blockquote.alert-tip       { border-left-color: #10b981; background: rgba(16,185,129,0.06); }
+        .markdown-body blockquote.alert-important { border-left-color: #8b5cf6; background: rgba(139,92,246,0.06); }
+        .markdown-body blockquote.alert-warning   { border-left-color: #f59e0b; background: rgba(245,158,11,0.06); }
+        .markdown-body blockquote.alert-caution   { border-left-color: #ef4444; background: rgba(239,68,68,0.06); }
+
+        .markdown-body table { border-collapse: collapse; margin: 8px 0; width: 100%; }
+        .markdown-body th, .markdown-body td { border: 1px solid var(--border); padding: 4px 8px; font-size: 12px; }
+        .markdown-body th { background: var(--code-bg); font-weight: 600; }
+
+        /* ── Backlinks — viz.html "Cited by" ────────────────────── */
+        #detail-backlinks {
+            margin-top: 18px;
+            padding-top: 14px;
+            border-top: 1px solid var(--border);
+        }
+
+        #detail-backlinks h2 {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--muted);
+            margin-bottom: 8px;
+        }
+
+        #detail-backlinks ul { list-style: none; display: flex; flex-direction: column; gap: 4px; }
+
+        #detail-backlinks a {
+            color: var(--accent);
+            font-size: 13px;
+            cursor: pointer;
+            text-decoration: none;
+        }
+
+        #detail-backlinks a:hover { text-decoration: underline; }
+
+        /* ── Citations ──────────────────────────────────────────── */
+        .citations-section {
+            margin-top: 16px;
+            padding-top: 14px;
+            border-top: 1px solid var(--border);
+        }
+
+        .citations-section h2 {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--muted);
+            margin-bottom: 8px;
+        }
+
+        .citation-card {
+            display: flex;
+            gap: 8px;
+            padding: 8px 10px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            margin-bottom: 6px;
+            font-size: 12px;
+            background: var(--bg);
+        }
+
+        .citation-num { font-weight: 700; color: var(--accent); flex-shrink: 0; }
+        .citation-card a { color: var(--accent); }
+        .citation-host { color: var(--muted); font-family: 'Fira Code', monospace; font-size: 11px; }
+
+        /* ── Scrollbar ──────────────────────────────────────────── */
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+        /* ── Responsive ─────────────────────────────────────────── */
+        @media (max-width: 900px) {
+            :root { --sidebar-w: 200px; }
+            .bundle-name { max-width: 140px; }
+        }
+
+        @media (max-width: 680px) {
+            aside { display: none; }
+            #graph { flex: 1 1 50%; }
+            #detail { flex: 0 0 50%; }
         }
     </style>
 </head>
 <body>
 
-    <!-- Header -->
-    <header>
-        <div class="logo-area">
-            <div class="logo-badge">OKF</div>
-            <div class="logo-title" id="bundle-title">Data Knowledge Catalog</div>
+<!-- ── Header ─────────────────────────────────────────────────── -->
+<header>
+    <div class="logo-badge">OKF</div>
+    <strong class="bundle-name" id="bundle-name"></strong>
+    <div class="header-spacer"></div>
+    <div class="header-controls">
+        <span class="ctrl-label">Layout</span>
+        <select class="ctrl-select" id="layout-select" title="Graph layout algorithm">
+            <option value="cose">Force</option>
+            <option value="concentric">Concentric</option>
+            <option value="breadthfirst">Breadth-first</option>
+            <option value="circle">Circle</option>
+            <option value="grid">Grid</option>
+        </select>
+        <button class="ctrl-btn" id="reset-btn">Reset view</button>
+        <button class="icon-btn" id="theme-btn" title="Toggle dark/light mode" aria-label="Toggle theme">
+            <svg id="sun-icon" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
+                 fill="none" stroke="currentColor" stroke-width="2" style="display:none">
+                <circle cx="12" cy="12" r="4"/>
+                <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
+            </svg>
+            <svg id="moon-icon" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
+                 fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>
+            </svg>
+        </button>
+    </div>
+</header>
+
+<!-- ── App ────────────────────────────────────────────────────── -->
+<div class="app">
+
+    <!-- ── Sidebar ────────────────────────────────────────────── -->
+    <aside>
+        <div class="sidebar-top">
+            <div class="search-wrap">
+                <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" width="13" height="13"
+                     viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"/>
+                    <path d="m21 21-4.35-4.35"/>
+                </svg>
+                <input id="search" type="search" placeholder="Search concepts…" autocomplete="off">
+            </div>
+            <select id="filter-type" title="Filter by concept type">
+                <option value="">All types</option>
+            </select>
         </div>
-        
-        <div class="header-controls">
-            <!-- Theme Toggle -->
-            <button class="btn-icon" id="theme-toggle" title="Toggle Dark/Light Mode">
-                <svg id="sun-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
-                <svg id="moon-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+        <nav id="nav-tree"></nav>
+        <div class="sidebar-footer">
+            <button class="log-btn" id="log-btn">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
+                     fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/>
+                </svg>
+                Update Log
             </button>
         </div>
-    </header>
+    </aside>
 
-    <!-- App Container -->
-    <div class="app-container">
-        
-        <!-- Sidebar -->
-        <aside>
-            <!-- Search Bar -->
-            <div class="sidebar-section">
-                <div class="search-container">
-                    <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <circle cx="11" cy="11" r="8"></circle>
-                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                    </svg>
-                    <input type="text" class="search-input" id="search-bar" placeholder="Search concepts...">
-                </div>
-            </div>
-            
-            <!-- Navigation Links -->
-            <nav class="nav-tree" id="navigation-tree">
-                <!-- Dynamically Populated -->
-            </nav>
-        </aside>
-        
-        <!-- Main Panel -->
-        <main>
-            <!-- Tabs -->
-            <div class="tab-bar">
-                <button class="tab-button active" id="tab-doc-btn" onclick="switchTab('doc')">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/><path d="M6 6h10"/><path d="M6 10h10"/></svg>
-                    Document
-                </button>
-                <button class="tab-button" id="tab-graph-btn" onclick="switchTab('graph')">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M3 20a6 6 0 0 1 12-1.2"/><path d="M18 20a6 6 0 0 1-6-6"/><circle cx="6" cy="6" r="3"/><path d="M6 9v5"/><path d="M9 6h5"/></svg>
-                    Relationship Graph
-                </button>
-                <button class="tab-button" id="tab-log-btn" onclick="switchTab('log')">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/></svg>
-                    Update Log
-                </button>
-            </div>
-            
-            <!-- Document View Panel -->
-            <div class="tab-panel active" id="panel-doc">
-                <div id="concept-view-content">
-                    <div class="empty-state">
-                        <div class="empty-state-icon">📚</div>
-                        <h2>No Concept Selected</h2>
-                        <p>Select a concept from the sidebar or search to get started.</p>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Graph View Panel -->
-            <div class="tab-panel" id="panel-graph" style="padding: 0;">
-                <div id="graph-container"></div>
-            </div>
+    <!-- ── Main ───────────────────────────────────────────────── -->
+    <div class="main">
 
-            <!-- Log View Panel -->
-            <div class="tab-panel" id="panel-log">
-                <div class="markdown-body" id="log-content">
-                    <!-- Loaded dynamically -->
-                </div>
-            </div>
-        </main>
-    </div>
-
-    <!-- Floating Hover Tooltip -->
-    <div class="hover-card" id="hover-tooltip">
-        <div class="hover-card-title" id="tooltip-title">Concept Title</div>
-        <div class="hover-card-meta">
-            <span class="badge-type" id="tooltip-badge-type" style="background-color: var(--color-default)">Type</span>
-            <span class="hover-card-desc" id="tooltip-id">tables/users</span>
+        <!-- Graph canvas -->
+        <div id="graph">
+            <div class="graph-hint" id="graph-hint">Click a node to view details</div>
         </div>
-        <div class="hover-card-desc" id="tooltip-desc">Description of the target concept goes here.</div>
+
+        <!-- Detail panel -->
+        <section id="detail">
+
+            <!-- Empty state -->
+            <div id="detail-empty">
+                <span class="empty-icon">📊</span>
+                <p>Click a node in the graph<br>or select a concept from the sidebar.</p>
+            </div>
+
+            <!-- Log overlay -->
+            <div id="log-overlay">
+                <div class="log-overlay-header">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
+                         fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/>
+                    </svg>
+                    <h2>Update Log</h2>
+                    <button class="close-log" id="close-log" title="Close">&times;</button>
+                </div>
+                <div class="markdown-body" id="log-body"></div>
+            </div>
+
+            <!-- Concept article -->
+            <article id="detail-content" hidden>
+                <div class="detail-header">
+                    <span class="type-chip" id="detail-type"></span>
+                    <h1 id="detail-title"></h1>
+                    <div class="detail-id" id="detail-id"></div>
+                </div>
+
+                <dl class="frontmatter">
+                    <dt>Description</dt><dd id="detail-description"></dd>
+                    <dt>Resource</dt>  <dd id="detail-resource"></dd>
+                    <dt>Tags</dt>      <dd id="detail-tags"></dd>
+                </dl>
+
+                <hr>
+
+                <div class="markdown-body" id="detail-body"></div>
+
+                <section id="detail-backlinks" hidden>
+                    <h2>Cited by</h2>
+                    <ul id="backlinks-list"></ul>
+                </section>
+
+                <div id="detail-citations"></div>
+            </article>
+
+        </section>
     </div>
+</div>
 
-    <!-- Data Injection -->
-    <script id="okf-bundle-data" type="application/json">
-        {{.BundleJSON}}
-    </script>
+<!-- Bundle data (injected by okf doc) -->
+<script id="okf-bundle-data" type="application/json">{{.BundleJSON}}</script>
 
-    <!-- App Logic -->
-    <script>
-        // Parse the injected bundle data
-        const bundle = JSON.parse(document.getElementById('okf-bundle-data').textContent);
+<!-- App logic -->
+<script>
+'use strict';
 
-        /**
-         * escHtml — safely encodes a string for injection into innerHTML.
-         * Use this for ALL user-controlled or bundle-sourced strings placed
-         * inside innerHTML to prevent XSS.
-         */
-        function escHtml(s) {
-            if (s == null) return '';
-            const d = document.createElement('div');
-            d.textContent = String(s);
-            return d.innerHTML;
-        }
+/* ═══════════════════════════════════════════════════════════════
+   Data
+═══════════════════════════════════════════════════════════════ */
+const bundle   = JSON.parse(document.getElementById('okf-bundle-data').textContent);
+const concepts = bundle.concepts || {};
+const links    = bundle.links    || [];
 
-        // State management
-        let activeConceptId = '';
-        let visNetwork = null;
+/* ═══════════════════════════════════════════════════════════════
+   Helpers
+═══════════════════════════════════════════════════════════════ */
 
-        // Color mapping by frontmatter type
-        const typeColors = {
-            'dataset': 'var(--color-dataset)',
-            'table': 'var(--color-table)',
-            'bigquery table': 'var(--color-table)',
-            'spanner table': 'var(--color-table)',
-            'postgres table': 'var(--color-table)',
-            'metric': 'var(--color-metric)',
-            'playbook': 'var(--color-playbook)'
-        };
+/** XSS-safe HTML encoder for user-controlled strings placed in innerHTML. */
+function esc(s) {
+    if (s == null) return '';
+    const d = document.createElement('div');
+    d.textContent = String(s);
+    return d.innerHTML;
+}
 
-        function getTypeColor(type) {
-            if (!type) return 'var(--color-default)';
-            const lower = type.toLowerCase();
-            for (const key in typeColors) {
-                if (lower.includes(key)) {
-                    return typeColors[key];
-                }
+/* ═══════════════════════════════════════════════════════════════
+   Type → color mapping (matches viz.html)
+═══════════════════════════════════════════════════════════════ */
+const TYPE_COLORS = {
+    'dataset':          '#8b5cf6',
+    'bigquery dataset': '#8b5cf6',
+    'table':            '#3b82f6',
+    'bigquery table':   '#3b82f6',
+    'spanner table':    '#3b82f6',
+    'postgres table':   '#3b82f6',
+    'metric':           '#10b981',
+    'reference':        '#10b981',
+    'playbook':         '#f59e0b',
+};
+
+function typeColor(type) {
+    if (!type) return '#94a3b8';
+    const lower = type.toLowerCase();
+    for (const key in TYPE_COLORS) {
+        if (lower.includes(key)) return TYPE_COLORS[key];
+    }
+    return '#94a3b8';
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Pre-computed indices
+═══════════════════════════════════════════════════════════════ */
+
+// Backlinks: for each concept id, which other concepts link TO it?
+const backlinksIndex = {};
+links.forEach(function(lnk) {
+    if (!backlinksIndex[lnk.to]) backlinksIndex[lnk.to] = [];
+    backlinksIndex[lnk.to].push(lnk.from);
+});
+
+// Node degree (in + out) for sizing
+const degreeIndex = {};
+links.forEach(function(lnk) {
+    degreeIndex[lnk.from] = (degreeIndex[lnk.from] || 0) + 1;
+    degreeIndex[lnk.to]   = (degreeIndex[lnk.to]   || 0) + 1;
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   App State
+═══════════════════════════════════════════════════════════════ */
+let cy            = null;
+let activeId      = null;
+let darkMode      = false;
+let filterType    = '';
+let searchQuery   = '';
+
+/* ═══════════════════════════════════════════════════════════════
+   Title
+═══════════════════════════════════════════════════════════════ */
+const bundleTitle = bundle.title || 'OKF Bundle';
+document.getElementById('bundle-name').textContent = bundleTitle;
+document.title = bundleTitle + ' — OKF Documentation';
+
+/* ═══════════════════════════════════════════════════════════════
+   marked.js — GFM alert extension
+═══════════════════════════════════════════════════════════════ */
+marked.use({
+    renderer: {
+        blockquote: function(quote) {
+            var m = quote.match(/\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]/i);
+            if (m) {
+                var t = m[1].toUpperCase();
+                var clean = quote.replace(/\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*<br\s*\/?>?/i, '');
+                return '<blockquote class="alert alert-' + t.toLowerCase() + '">' + clean + '</blockquote>';
             }
-            return 'var(--color-default)';
+            return '<blockquote>' + quote + '</blockquote>';
         }
+    }
+});
 
-        // Configure marked.js alerts parser (GFM style alerts)
-        const originalBlockquote = marked.Renderer.prototype.blockquote;
-        marked.use({
-            renderer: {
-                blockquote(quote) {
-                    const alertMatch = quote.match(/\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]/i);
-                    if (alertMatch) {
-                        const alertType = alertMatch[1].toUpperCase();
-                        const cleanQuote = quote.replace(/\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*<br\s*\/?>?/i, '');
-                        return '\n<blockquote class="alert alert-' + alertType.toLowerCase() + '">' + cleanQuote + '</blockquote>\n';
-                    }
-                    return '<blockquote>' + quote + '</blockquote>';
+/* ═══════════════════════════════════════════════════════════════
+   Graph — Cytoscape.js
+═══════════════════════════════════════════════════════════════ */
+
+function buildElements(fType, sQuery) {
+    var nodes = [];
+    var edges = [];
+
+    var q = (sQuery || '').toLowerCase().trim();
+
+    Object.values(concepts).forEach(function(c) {
+        var matchType = !fType || (c.type || '').toLowerCase() === fType.toLowerCase();
+        var matchSearch = !q ||
+            (c.title || '').toLowerCase().includes(q) ||
+            c.id.toLowerCase().includes(q) ||
+            (c.description || '').toLowerCase().includes(q) ||
+            (c.tags || []).join(' ').toLowerCase().includes(q);
+
+        if (matchType && matchSearch) {
+            var deg  = degreeIndex[c.id] || 0;
+            var size = 20 + Math.min(deg * 4, 40); // 20–60 px
+            nodes.push({
+                group: 'nodes',
+                data: {
+                    id:          c.id,
+                    label:       c.title || c.id,
+                    type:        c.type  || '',
+                    description: c.description || '',
+                    color:       typeColor(c.type),
+                    size:        size,
                 }
+            });
+        }
+    });
+
+    var visibleIds = new Set(nodes.map(function(n) { return n.data.id; }));
+
+    links.forEach(function(lnk) {
+        if (visibleIds.has(lnk.from) && visibleIds.has(lnk.to)) {
+            edges.push({
+                group: 'edges',
+                data: {
+                    id:     lnk.from + '__' + lnk.to,
+                    source: lnk.from,
+                    target: lnk.to,
+                }
+            });
+        }
+    });
+
+    return nodes.concat(edges);
+}
+
+function graphStyle() {
+    var fontColor = darkMode ? '#f1f5f9' : '#0f172a';
+    var edgeColor = darkMode ? '#475569' : '#cbd5e1';
+    var bgColor   = darkMode ? '#1e293b' : '#ffffff';
+    return [
+        {
+            selector: 'node',
+            style: {
+                'background-color':  'data(color)',
+                'label':             'data(label)',
+                'width':             'data(size)',
+                'height':            'data(size)',
+                'font-size':         11,
+                'font-family':       'Inter, system-ui, sans-serif',
+                'color':             fontColor,
+                'text-valign':       'bottom',
+                'text-halign':       'center',
+                'text-margin-y':     4,
+                'text-max-width':    120,
+                'text-wrap':         'ellipsis',
+                'border-width':      2,
+                'border-color':      bgColor,
             }
+        },
+        {
+            selector: 'node:selected',
+            style: {
+                'border-color': '#2563eb',
+                'border-width': 3,
+            }
+        },
+        {
+            selector: 'node.faded',
+            style: { 'opacity': 0.2 }
+        },
+        {
+            selector: 'edge',
+            style: {
+                'width':              1.5,
+                'line-color':         edgeColor,
+                'target-arrow-color': edgeColor,
+                'target-arrow-shape': 'triangle',
+                'curve-style':        'bezier',
+                'opacity':            0.7,
+            }
+        },
+        {
+            selector: 'edge.faded',
+            style: { 'opacity': 0.08 }
+        },
+    ];
+}
+
+function initGraph() {
+    cy = cytoscape({
+        container: document.getElementById('graph'),
+        elements:  buildElements(filterType, searchQuery),
+        style:     graphStyle(),
+        layout:    { name: 'cose', animate: false, padding: 40, randomize: false },
+        minZoom:   0.1,
+        maxZoom:   5,
+    });
+
+    // Click node → load detail
+    cy.on('tap', 'node', function(evt) {
+        var id = evt.target.data('id');
+        loadDetail(id);
+        highlightNode(id);
+    });
+
+    // Click background → unfade all
+    cy.on('tap', function(evt) {
+        if (evt.target === cy) {
+            cy.elements().removeClass('faded');
+            cy.elements().unselect();
+        }
+    });
+}
+
+function highlightNode(id) {
+    if (!cy) return;
+    cy.elements().addClass('faded');
+    var node = cy.getElementById(id);
+    if (node && node.length) {
+        var neighborhood = node.closedNeighborhood();
+        neighborhood.removeClass('faded');
+        cy.elements().unselect();
+        node.select();
+    }
+}
+
+function runLayout(layoutName) {
+    if (!cy) return;
+    cy.layout({ name: layoutName || 'cose', animate: true, animationDuration: 400, padding: 40 }).run();
+}
+
+function refreshGraph() {
+    if (!cy) { initGraph(); return; }
+    cy.elements().remove();
+    cy.add(buildElements(filterType, searchQuery));
+    cy.style(graphStyle());
+    var name = document.getElementById('layout-select').value;
+    cy.layout({ name: name, animate: false, padding: 40 }).run();
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Sidebar — type filter select population
+═══════════════════════════════════════════════════════════════ */
+function populateTypeFilter() {
+    var sel   = document.getElementById('filter-type');
+    var types = Array.from(new Set(
+        Object.values(concepts).map(function(c) { return c.type; }).filter(Boolean)
+    )).sort();
+    types.forEach(function(t) {
+        var opt = document.createElement('option');
+        opt.value = t;
+        opt.textContent = t;
+        sel.appendChild(opt);
+    });
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Sidebar — nav tree
+═══════════════════════════════════════════════════════════════ */
+function renderNav() {
+    var tree = document.getElementById('nav-tree');
+    tree.innerHTML = '';
+
+    var q = (searchQuery || '').toLowerCase().trim();
+
+    var filtered = Object.values(concepts).filter(function(c) {
+        var matchType = !filterType || (c.type || '').toLowerCase() === filterType.toLowerCase();
+        var matchQ = !q ||
+            (c.title || '').toLowerCase().includes(q) ||
+            c.id.toLowerCase().includes(q) ||
+            (c.description || '').toLowerCase().includes(q) ||
+            (c.tags || []).join(' ').toLowerCase().includes(q);
+        return matchType && matchQ;
+    });
+
+    if (filtered.length === 0) {
+        tree.innerHTML = '<div class="nav-empty">No concepts found</div>';
+        return;
+    }
+
+    // Group by type
+    var groups = {};
+    filtered.forEach(function(c) {
+        var t = c.type || 'Other';
+        if (!groups[t]) groups[t] = [];
+        groups[t].push(c);
+    });
+
+    Object.keys(groups).sort().forEach(function(type) {
+        var color = typeColor(type);
+
+        var groupTitle = document.createElement('div');
+        groupTitle.className = 'nav-group-title';
+        groupTitle.innerHTML =
+            '<span class="nav-dot" style="background:' + color + '"></span>' +
+            esc(type);
+        tree.appendChild(groupTitle);
+
+        var ul = document.createElement('ul');
+        ul.className = 'nav-list';
+
+        var sorted = groups[type].slice().sort(function(a, b) {
+            return (a.title || a.id).localeCompare(b.title || b.id);
         });
 
-        // Init Title
-        if (bundle.title) {
-            document.getElementById('bundle-title').textContent = bundle.title;
-            document.title = bundle.title + ' — OKF Documentation';
-        }
+        sorted.forEach(function(c) {
+            var li   = document.createElement('li');
+            var item = document.createElement('div');
+            item.className = 'nav-item' + (c.id === activeId ? ' active' : '');
+            item.dataset.id = c.id;
 
-        // Setup theme toggle
-        const themeToggle = document.getElementById('theme-toggle');
-        const sunIcon = document.getElementById('sun-icon');
-        const moonIcon = document.getElementById('moon-icon');
+            var label = document.createElement('span');
+            label.className = 'nav-item-label';
+            label.textContent = c.title || c.id;
+            item.appendChild(label);
 
-        themeToggle.addEventListener('click', () => {
-            const isDark = document.documentElement.classList.toggle('dark');
-            sunIcon.style.display = isDark ? 'none' : 'block';
-            moonIcon.style.display = isDark ? 'block' : 'none';
-            if (visNetwork) {
-                // Re-render network graph with dark/light variables
-                buildGraph();
+            if (c.tags && c.tags[0]) {
+                var tag = document.createElement('span');
+                tag.className = 'nav-tag';
+                tag.textContent = c.tags[0];
+                item.appendChild(tag);
             }
+
+            item.addEventListener('click', function() {
+                loadDetail(c.id);
+                if (cy) {
+                    var node = cy.getElementById(c.id);
+                    if (node && node.length) {
+                        cy.animate({ center: { eles: node }, zoom: Math.max(cy.zoom(), 1.2) }, { duration: 300 });
+                        highlightNode(c.id);
+                    }
+                }
+            });
+
+            li.appendChild(item);
+            ul.appendChild(li);
         });
 
-        // Initialize theme UI
-        const isSystemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        if (isSystemDark) {
-            document.documentElement.classList.add('dark');
-            sunIcon.style.display = 'none';
-            moonIcon.style.display = 'block';
-        } else {
-            document.documentElement.classList.remove('dark');
-            sunIcon.style.display = 'block';
-            moonIcon.style.display = 'none';
+        tree.appendChild(ul);
+    });
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Detail panel — concept renderer
+═══════════════════════════════════════════════════════════════ */
+async function loadDetail(id) {
+    activeId = id;
+    var meta = concepts[id];
+    if (!meta) return;
+
+    // Hide log overlay and empty state; show article
+    document.getElementById('log-overlay').style.display    = 'none';
+    document.getElementById('detail-empty').style.display   = 'none';
+    document.getElementById('detail-content').hidden        = false;
+    document.getElementById('graph-hint').style.display     = 'none';
+
+    // Header
+    var typeEl = document.getElementById('detail-type');
+    typeEl.textContent   = meta.type || 'Concept';
+    typeEl.style.background = typeColor(meta.type);
+    document.getElementById('detail-title').textContent = meta.title || id;
+    document.getElementById('detail-id').textContent    = id;
+
+    // Frontmatter: description
+    document.getElementById('detail-description').textContent = meta.description || '—';
+
+    // Frontmatter: resource
+    var resEl = document.getElementById('detail-resource');
+    if (meta.resource) {
+        var isUrl = meta.resource.startsWith('http');
+        resEl.innerHTML = isUrl
+            ? '<a href="' + esc(meta.resource) + '" target="_blank" rel="noopener noreferrer">' + esc(meta.resource) + '</a>'
+            : esc(meta.resource);
+    } else {
+        resEl.textContent = '—';
+    }
+
+    // Frontmatter: tags
+    var tagsEl = document.getElementById('detail-tags');
+    if (meta.tags && meta.tags.length) {
+        tagsEl.innerHTML = meta.tags.map(function(t) {
+            return '<span class="tag">' + esc(t) + '</span>';
+        }).join('');
+    } else {
+        tagsEl.textContent = '—';
+    }
+
+    // Body: show loading placeholder, then fetch full concept
+    var bodyEl = document.getElementById('detail-body');
+    bodyEl.innerHTML = '<span style="color:var(--muted);font-size:12px">Loading…</span>';
+
+    var concept = meta;
+    try {
+        var resp = await fetch('concepts/' + id + '.json');
+        if (resp.ok) concept = await resp.json();
+    } catch (_) { /* fall back to index entry */ }
+
+    // Render markdown body
+    try {
+        bodyEl.innerHTML = marked.parse(concept.body || '*No content.*');
+    } catch (e) {
+        bodyEl.innerHTML = '<pre>' + esc(concept.body) + '</pre>';
+    }
+
+    // Rewrite internal markdown links to in-app navigation
+    bodyEl.querySelectorAll('a[href]').forEach(function(a) {
+        var href = a.getAttribute('href');
+        if (!href || href.startsWith('http') || href.startsWith('mailto:') || href.startsWith('#')) return;
+        var path = href.split('#')[0].replace(/\.md$/, '');
+        var resolved = resolveConceptId(path, id);
+        if (resolved && concepts[resolved]) {
+            a.href = 'javascript:void(0)';
+            a.classList.add('internal');
+            a.addEventListener('click', (function(rid) {
+                return function(e) { e.preventDefault(); loadDetail(rid); highlightNode(rid); };
+            }(resolved)));
         }
+    });
 
-        // Populate Navigation Tree
-        function renderNavigation(filteredConcepts = null) {
-            const conceptsToRender = filteredConcepts || Object.values(bundle.concepts);
-            const navTree = document.getElementById('navigation-tree');
-            navTree.innerHTML = '';
-
-            if (conceptsToRender.length === 0) {
-                navTree.innerHTML = '<div style="color: var(--text-secondary); text-align: center; font-size: 0.9rem; padding: 1rem;">No concepts found</div>';
-                return;
-            }
-
-            // Group by concept type
-            const groups = {};
-            conceptsToRender.forEach(c => {
-                const type = c.type || 'Other';
-                if (!groups[type]) {
-                    groups[type] = [];
-                }
-                groups[type].push(c);
+    // Backlinks (Cited by)
+    var bl       = backlinksIndex[id] || [];
+    var blSec    = document.getElementById('detail-backlinks');
+    var blList   = document.getElementById('backlinks-list');
+    if (bl.length) {
+        blSec.hidden  = false;
+        blList.innerHTML = bl.map(function(fromId) {
+            var fc = concepts[fromId];
+            return '<li><a href="javascript:void(0)" data-id="' + esc(fromId) + '">' +
+                esc(fc ? (fc.title || fromId) : fromId) + '</a></li>';
+        }).join('');
+        blList.querySelectorAll('a[data-id]').forEach(function(a) {
+            a.addEventListener('click', function() {
+                var fid = a.dataset.id;
+                loadDetail(fid);
+                highlightNode(fid);
             });
-
-            // Sort group names
-            const sortedGroups = Object.keys(groups).sort();
-
-            sortedGroups.forEach(type => {
-                const section = document.createElement('div');
-                
-                const title = document.createElement('div');
-                title.className = 'nav-group-title';
-                const dotColor = getTypeColor(type);
-                title.innerHTML = '<span class="nav-group-dot" style="background-color: ' + dotColor + '"></span>' + type;
-                section.appendChild(title);
-
-                const ul = document.createElement('ul');
-                ul.className = 'nav-list';
-
-                // Sort items by Title/ID
-                const sortedItems = groups[type].sort((a, b) => {
-                    const titleA = a.title || a.id;
-                    const titleB = b.title || b.id;
-                    return titleA.localeCompare(titleB);
-                });
-
-                sortedItems.forEach(c => {
-                    const li = document.createElement('li');
-                    const link = document.createElement('a');
-                    link.className = 'nav-item-link';
-                    if (c.id === activeConceptId) {
-                        link.classList.add('active');
-                    }
-                    link.href = '#/concept/' + c.id;
-                    
-                    const titleSpan = document.createElement('span');
-                    titleSpan.className = 'nav-item-title';
-                    titleSpan.textContent = c.title || c.id;
-                    link.appendChild(titleSpan);
-
-                    if (c.tags && c.tags.length > 0) {
-                        const tagBadge = document.createElement('span');
-                        tagBadge.className = 'nav-item-badge';
-                        tagBadge.textContent = c.tags[0];
-                        link.appendChild(tagBadge);
-                    }
-
-                    li.appendChild(link);
-                    ul.appendChild(li);
-                });
-
-                section.appendChild(ul);
-                navTree.appendChild(section);
-            });
-        }
-
-        // Live Search
-        const searchBar = document.getElementById('search-bar');
-        searchBar.addEventListener('input', (e) => {
-            const query = e.target.value.toLowerCase().trim();
-            if (!query) {
-                renderNavigation();
-                return;
-            }
-
-            const filtered = Object.values(bundle.concepts).filter(c => {
-                const title = (c.title || '').toLowerCase();
-                const id = c.id.toLowerCase();
-                const desc = (c.description || '').toLowerCase();
-                const excerpt = (c.excerpt || '').toLowerCase();
-                const tags = (c.tags || []).map(t => t.toLowerCase()).join(' ');
-
-                return title.includes(query) ||
-                       id.includes(query) ||
-                       desc.includes(query) ||
-                       excerpt.includes(query) ||
-                       tags.includes(query);
-            });
-
-            renderNavigation(filtered);
         });
+    } else {
+        blSec.hidden = true;
+    }
 
-        // Tab Switcher
-        function switchTab(tabName) {
-            // Deactivate all
-            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
-            document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.remove('active'));
-
-            // Activate target
-            document.getElementById('tab-' + tabName + '-btn').classList.add('active');
-            document.getElementById('panel-' + tabName).classList.add('active');
-
-            if (tabName === 'graph') {
-                // Initialize/Resize graph
-                buildGraph();
-            }
-        }
-
-        // Hover Card Tooltip Logic
-        const tooltip = document.getElementById('hover-tooltip');
-        function setupTooltips() {
-            const markdownContainer = document.getElementById('concept-view-content');
-            const links = markdownContainer.querySelectorAll('a');
-
-            links.forEach(link => {
-                const href = link.getAttribute('href');
-                if (!href) return;
-
-                // Check if this links to a concept
-                const targetConcept = resolveConceptFromLink(href);
-                if (targetConcept) {
-                    // It's a local concept link. Rewrite it to point to the hash routing
-                    link.href = '#/concept/' + targetConcept.id;
-
-                    // Attach tooltip events
-                    link.addEventListener('mouseenter', (e) => {
-                        showTooltip(e, targetConcept);
-                    });
-
-                    link.addEventListener('mousemove', (e) => {
-                        positionTooltip(e);
-                    });
-
-                    link.addEventListener('mouseleave', () => {
-                        hideTooltip();
-                    });
-                }
-            });
-        }
-
-        function resolveConceptFromLink(href) {
-            // Handle cases: "../tables/users.md", "users.md", "tables/users"
-            if (href.startsWith('http') || href.startsWith('mailto:') || href.startsWith('#')) {
-                return null;
-            }
-
-            let path = href.split('#')[0]; // Strip anchor
-            if (!path) return null;
-
-            path = path.replace(/\.md$/, ''); // Strip md extension
-
-            // Try direct lookup
-            if (bundle.concepts[path]) {
-                return bundle.concepts[path];
-            }
-
-            // Try relative resolution from activeConceptId
-            if (activeConceptId) {
-                const parts = activeConceptId.split('/');
-                parts.pop(); // Remove active file
-                
-                // Process relative directories in link path (e.g. "../tables/users")
-                const hrefParts = path.split('/');
-                const resolvedParts = [...parts];
-                
-                for (const part of hrefParts) {
-                    if (part === '..') {
-                        resolvedParts.pop();
-                    } else if (part !== '.' && part !== '') {
-                        resolvedParts.push(part);
-                    }
-                }
-                
-                const resolvedId = resolvedParts.join('/');
-                if (bundle.concepts[resolvedId]) {
-                    return bundle.concepts[resolvedId];
-                }
-            }
-
-            // Fallback: search by end-of-path match
-            const normalizedPath = path.replace(/^\.\//, '');
-            for (const id in bundle.concepts) {
-                if (id === normalizedPath || id.endsWith('/' + normalizedPath)) {
-                    return bundle.concepts[id];
-                }
-            }
-
-            return null;
-        }
-
-        function showTooltip(e, concept) {
-            document.getElementById('tooltip-title').textContent = concept.title || concept.id;
-            document.getElementById('tooltip-id').textContent = concept.id;
-            document.getElementById('tooltip-desc').textContent = concept.description || 'No description provided.';
-            
-            const badge = document.getElementById('tooltip-badge-type');
-            badge.textContent = concept.type || 'Concept';
-            badge.style.backgroundColor = getTypeColor(concept.type);
-
-            tooltip.style.display = 'block';
-            positionTooltip(e);
-        }
-
-        function positionTooltip(e) {
-            // Read bounds
-            const width = tooltip.offsetWidth;
-            const height = tooltip.offsetHeight;
-            
-            let left = e.pageX + 15;
-            let top = e.pageY + 15;
-
-            // Prevent clipping screen edges
-            if (left + width > window.innerWidth) {
-                left = e.pageX - width - 15;
-            }
-            if (top + height > window.innerHeight) {
-                top = e.pageY - height - 15;
-            }
-
-            tooltip.style.left = left + 'px';
-            tooltip.style.top = top + 'px';
-        }
-
-        function hideTooltip() {
-            tooltip.style.display = 'none';
-        }
-
-        // Render Concept — fetches body lazily from concepts/<id>.json
-        async function renderConcept(id) {
-            const meta = bundle.concepts[id];
-            const contentPanel = document.getElementById('concept-view-content');
-
-            if (!meta) {
-                contentPanel.innerHTML = 
-                    '<div class="empty-state">' +
-                        '<div class="empty-state-icon">🔍</div>' +
-                        '<h2>Concept Not Found</h2>' +
-                        '<p>The concept ID "' + id + '" does not exist in this catalog bundle.</p>' +
-                    '</div>';
-                return;
-            }
-
-            activeConceptId = id;
-
-            // Highlight in sidebar
-            document.querySelectorAll('.nav-item-link').forEach(link => {
-                if (link.getAttribute('href') === '#/concept/' + id) {
-                    link.classList.add('active');
-                } else {
-                    link.classList.remove('active');
-                }
-            });
-
-            // Show skeleton loader while fetching body
-            contentPanel.innerHTML =
-                '<div style="padding: 2rem; display: flex; align-items: center; gap: 1rem; color: var(--text-secondary);">' +
-                    '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation: spin 1s linear infinite;"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>' +
-                    '<span>Loading concept…</span>' +
+    // Citations
+    var citEl = document.getElementById('detail-citations');
+    if (concept.citations && concept.citations.length) {
+        citEl.innerHTML =
+            '<div class="citations-section">' +
+            '<h2>Citations &amp; Sources</h2>' +
+            concept.citations.map(function(c) {
+                var isLocal = !c.uri.startsWith('http');
+                var host = c.uri;
+                try { if (!isLocal) host = new URL(c.uri).hostname; } catch(_) {}
+                var target = isLocal ? '' : ' target="_blank" rel="noopener noreferrer"';
+                return '<div class="citation-card">' +
+                    '<span class="citation-num">[' + esc(c.number) + ']</span>' +
+                    '<div>' +
+                        '<div><a href="' + esc(c.uri) + '"' + target + '>' +
+                            esc(c.title) + (isLocal ? '' : ' ↗') +
+                        '</a></div>' +
+                        '<div class="citation-host">' + esc(host) + '</div>' +
+                    '</div>' +
                 '</div>';
+            }).join('') +
+            '</div>';
+    } else {
+        citEl.innerHTML = '';
+    }
 
-            // Fetch the per-concept JSON file
-            let concept = meta;
-            try {
-                const resp = await fetch('concepts/' + id + '.json');
-                if (resp.ok) {
-                    const data = await resp.json();
-                    concept = data;
-                }
-            } catch (fetchErr) {
-                console.warn('Failed to fetch concept body for "' + id + '":', fetchErr);
-            }
+    // Scroll detail panel to top
+    document.getElementById('detail').scrollTop = 0;
 
-            // Build metadata header
-            const typeColor = getTypeColor(concept.type);
-            const resourceBlock = concept.resource 
-                ? '<span class="badge-resource" title="Resource Path">' + concept.resource + '</span>'
-                : '';
-                
-            const tagsBlock = (concept.tags && concept.tags.length > 0)
-                ? '\n<div class="tag-list">\n' + 
-                  concept.tags.map(t => '<span class="tag-badge">#' + t + '</span>').join('') + 
-                  '\n</div>'
-                : '';
+    // Update nav active state
+    document.querySelectorAll('.nav-item').forEach(function(el) {
+        el.classList.toggle('active', el.dataset.id === id);
+    });
 
-            const timestampBlock = concept.timestamp
-                ? '<span style="font-size: 0.8rem; color: var(--text-secondary)">Updated: ' + new Date(concept.timestamp).toLocaleDateString() + '</span>'
-                : '';
+    // Update hash without triggering hashchange re-render
+    history.replaceState(null, '', '#/concept/' + id);
+}
 
-            // Parse body markdown
-            let htmlBody = '';
-            try {
-                htmlBody = marked.parse(concept.body || '');
-            } catch (err) {
-                htmlBody = '<p style="color: red">Error rendering markdown: ' + err.message + '</p><pre>' + concept.body + '</pre>';
-            }
-
-            let citationsBlock = '';
-            if (concept.citations && concept.citations.length > 0) {
-                citationsBlock = 
-                    '<div class="citations-container" style="margin-top: 3rem; border-top: 1px solid var(--border-color); padding-top: 2rem;">' +
-                        '<h3 style="margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem; font-size: 1.1rem; font-weight: 600;">' +
-                            '<svg style="width: 18px; height: 18px; fill: currentColor; opacity: 0.8;" viewBox="0 0 24 24"><path d="M14 17h6v2h-6zm0-4h6v2h-6zm0-4h6v2h-6zm-4 8H4v-2h6zm0-4H4v-2h6zm0-4H4V9h6z"/></svg>' +
-                            'Citations & Sources' +
-                        '</h3>' +
-                        '<div class="citations-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">' +
-                            concept.citations.map(c => {
-                                const isLocal = !c.uri.startsWith('http://') && !c.uri.startsWith('https://');
-                                const displayUri = isLocal ? c.uri : new URL(c.uri).hostname;
-                                const extIcon = isLocal 
-                                    ? '' 
-                                    : ' <span style="font-size: 0.75rem; opacity: 0.6;">↗</span>';
-                                const targetAttr = isLocal ? '' : 'target="_blank" rel="noopener noreferrer"';
-                                return (
-                                    '<div class="citation-card" style="padding: 1rem; border: 1px solid var(--border-color); border-radius: 10px; background-color: var(--bg-secondary); display: flex; align-items: flex-start; gap: 0.75rem; box-shadow: var(--shadow-sm); transition: var(--transition);">' +
-                                        '<span style="font-weight: 600; color: var(--accent-color); font-size: 0.8rem; padding: 0.15rem 0.45rem; border-radius: 6px; background-color: var(--accent-light); flex-shrink: 0; line-height: 1;">[' + escHtml(c.number) + ']</span>' +
-                                        '<div style="display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; flex: 1;">' +
-                                            '<a href="' + escHtml(c.uri) + '" ' + targetAttr + ' style="font-weight: 500; font-size: 0.95rem; text-decoration: none; color: var(--accent-color); overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; line-height: 1.3;">' + escHtml(c.title) + extIcon + '</a>' +
-                                            '<span style="font-size: 0.75rem; color: var(--text-secondary); word-break: break-all; font-family: monospace;">' + escHtml(displayUri) + '</span>' +
-                                        '</div>' +
-                                    '</div>'
-                                );
-                            }).join('') +
-                        '</div>' +
-                    '</div>';
-            }
-
-            contentPanel.innerHTML = 
-                '<div class="concept-header">' +
-                    '<div class="concept-title-row">' +
-                        '<h1 class="concept-title">' + escHtml(concept.title || concept.id) + '</h1>' +
-                        '<span class="badge-type" style="background-color: ' + escHtml(typeColor) + '">' + escHtml(concept.type || 'Concept') + '</span>' +
-                    '</div>' +
-                    '<div class="concept-meta">' +
-                        resourceBlock +
-                        tagsBlock +
-                        timestampBlock +
-                    '</div>' +
-                '</div>' +
-                '<div class="markdown-body">' +
-                    htmlBody +
-                '</div>' +
-                citationsBlock;
-
-            // Reset scroll
-            document.getElementById('panel-doc').scrollTop = 0;
-
-            // Setup custom links & tooltips
-            setupTooltips();
+/**
+ * resolveConceptId resolves a relative or bare path from a markdown link
+ * to an absolute concept ID present in the bundle.
+ */
+function resolveConceptId(path, fromId) {
+    if (concepts[path]) return path;
+    // Relative resolution from fromId directory
+    if (fromId) {
+        var parts  = fromId.split('/');
+        parts.pop();
+        var hparts = path.split('/');
+        var res    = parts.slice();
+        for (var i = 0; i < hparts.length; i++) {
+            var p = hparts[i];
+            if (p === '..') { res.pop(); }
+            else if (p && p !== '.') { res.push(p); }
         }
+        var resolved = res.join('/');
+        if (concepts[resolved]) return resolved;
+    }
+    // Suffix match fallback
+    var norm = path.replace(/^\.\//, '');
+    for (var cid in concepts) {
+        if (cid === norm || cid.endsWith('/' + norm)) return cid;
+    }
+    return null;
+}
 
-        // Build Relationship Graph
-        function buildGraph() {
-            const container = document.getElementById('graph-container');
-            
-            // Get colors based on dark/light mode
-            const isDark = document.documentElement.classList.contains('dark');
-            const fontColor = isDark ? '#f8fafc' : '#0f172a';
-            const edgeColor = isDark ? '#475569' : '#cbd5e1';
-            
-            // Prepare nodes and edges
-            const nodes = [];
-            const edges = [];
-            const edgeTracker = new Set();
+/* ═══════════════════════════════════════════════════════════════
+   Update Log overlay
+═══════════════════════════════════════════════════════════════ */
+function showLog() {
+    document.getElementById('detail-empty').style.display  = 'none';
+    document.getElementById('detail-content').hidden       = true;
+    document.getElementById('graph-hint').style.display    = 'none';
+    var overlay = document.getElementById('log-overlay');
+    overlay.style.display = 'block';
+    var logBody = document.getElementById('log-body');
+    if (bundle.log) {
+        try { logBody.innerHTML = marked.parse(bundle.log); }
+        catch(e) { logBody.textContent = bundle.log; }
+    } else {
+        logBody.innerHTML = '<p style="color:var(--muted)">No update log available in this bundle.</p>';
+    }
+    document.getElementById('detail').scrollTop = 0;
+}
 
-            Object.values(bundle.concepts).forEach(c => {
-                nodes.push({
-                    id: c.id,
-                    label: c.title || c.id,
-                    title: c.description || c.id,
-                    color: {
-                        background: getTypeColor(c.type),
-                        border: isDark ? '#0f172a' : '#ffffff',
-                        highlight: {
-                            background: '#3b82f6',
-                            border: '#3b82f6'
-                        }
-                    },
-                    shape: 'dot',
-                    size: 15,
-                    font: {
-                        color: fontColor,
-                        face: 'Outfit',
-                        size: 12
-                    }
-                });
+document.getElementById('log-btn').addEventListener('click', showLog);
 
+document.getElementById('close-log').addEventListener('click', function() {
+    document.getElementById('log-overlay').style.display = 'none';
+    if (activeId) {
+        document.getElementById('detail-content').hidden = false;
+    } else {
+        document.getElementById('detail-empty').style.display = 'flex';
+        document.getElementById('graph-hint').style.display   = '';
+    }
+});
 
-            });
+/* ═══════════════════════════════════════════════════════════════
+   Theme toggle
+═══════════════════════════════════════════════════════════════ */
+var sunIcon  = document.getElementById('sun-icon');
+var moonIcon = document.getElementById('moon-icon');
 
-            if (bundle.links) {
-                bundle.links.forEach(link => {
-                    const edgeKey = link.from + '->' + link.to;
-                    if (!edgeTracker.has(edgeKey)) {
-                        edgeTracker.add(edgeKey);
-                        edges.push({
-                            from: link.from,
-                            to: link.to,
-                            arrows: 'to',
-                            color: {
-                                color: edgeColor,
-                                highlight: '#3b82f6'
-                            },
-                            width: 1.5
-                        });
-                    }
-                });
-            }
+function applyTheme(isDark) {
+    darkMode = isDark;
+    document.documentElement.classList.toggle('dark', isDark);
+    sunIcon.style.display  = isDark ? 'block' : 'none';
+    moonIcon.style.display = isDark ? 'none'  : 'block';
+    if (cy) cy.style(graphStyle());
+}
 
-            const data = {
-                nodes: new vis.DataSet(nodes),
-                edges: new vis.DataSet(edges)
-            };
+document.getElementById('theme-btn').addEventListener('click', function() {
+    applyTheme(!darkMode);
+});
 
-            const options = {
-                physics: {
-                    solver: 'forceAtlas2Based',
-                    forceAtlas2Based: {
-                        gravitationalConstant: -50,
-                        centralGravity: 0.01,
-                        springLength: 100,
-                        springConstant: 0.08
-                    }
-                },
-                interaction: {
-                    hover: true,
-                    tooltipDelay: 200
-                }
-            };
+/* ═══════════════════════════════════════════════════════════════
+   Event wiring
+═══════════════════════════════════════════════════════════════ */
+document.getElementById('search').addEventListener('input', function(e) {
+    searchQuery = e.target.value;
+    renderNav();
+    refreshGraph();
+});
 
-            if (visNetwork) {
-                visNetwork.destroy();
-            }
+document.getElementById('filter-type').addEventListener('change', function(e) {
+    filterType = e.target.value;
+    renderNav();
+    refreshGraph();
+});
 
-            visNetwork = new vis.Network(container, data, options);
+document.getElementById('layout-select').addEventListener('change', function(e) {
+    runLayout(e.target.value);
+});
 
-            // Navigate to concept on node double-click or click
-            visNetwork.on('click', function(params) {
-                if (params.nodes.length > 0) {
-                    const nodeId = params.nodes[0];
-                    window.location.hash = '#/concept/' + nodeId;
-                    switchTab('doc');
-                }
-            });
+document.getElementById('reset-btn').addEventListener('click', function() {
+    if (cy) cy.fit(undefined, 40);
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   Hash router
+═══════════════════════════════════════════════════════════════ */
+function route() {
+    var hash = window.location.hash;
+    if (hash.startsWith('#/concept/')) {
+        var id = decodeURIComponent(hash.slice('#/concept/'.length));
+        if (concepts[id]) {
+            loadDetail(id);
+            highlightNode(id);
         }
+    } else if (hash === '#/log') {
+        showLog();
+    }
+}
 
-        // Load Update Log
-        function loadUpdateLog() {
-            const logContentPanel = document.getElementById('log-content');
-            if (bundle.log) {
-                try {
-                    logContentPanel.innerHTML = marked.parse(bundle.log);
-                } catch (err) {
-                    logContentPanel.innerHTML = '<p style="color: red">Error rendering log markdown: ' + err.message + '</p>';
-                }
-            } else {
-                logContentPanel.innerHTML = 
-                    '<div style="color: var(--text-secondary); text-align: center; padding: 2rem;">' +
-                        '<h2>No Update Log Available</h2>' +
-                        '<p>This bundle does not contain a log.md file.</p>' +
-                    '</div>';
-            }
-        }
+window.addEventListener('hashchange', route);
 
-        // Router
-        function route() {
-            const hash = window.location.hash;
-            
-            if (hash.startsWith('#/concept/')) {
-                const conceptId = hash.replace('#/concept/', '');
-                renderConcept(conceptId);
-                switchTab('doc');
-            } else if (hash === '#/log') {
-                switchTab('log');
-            } else if (hash === '#/graph') {
-                switchTab('graph');
-            } else {
-                // Default view: render first concept if available
-                const conceptIds = Object.keys(bundle.concepts);
-                if (conceptIds.length > 0) {
-                    window.location.hash = '#/concept/' + conceptIds.sort()[0];
-                } else {
-                    // Empty bundle
-                    document.getElementById('concept-view-content').innerHTML = 
-                        '<div class="empty-state">' +
-                            '<div class="empty-state-icon">📂</div>' +
-                            '<h2>Catalog is Empty</h2>' +
-                            '<p>No valid OKF concept documents found in this bundle.</p>' +
-                        '</div>';
-                }
-            }
-        }
+/* ═══════════════════════════════════════════════════════════════
+   Bootstrap
+═══════════════════════════════════════════════════════════════ */
 
-        // Window Event Listeners
-        window.addEventListener('hashchange', route);
+// Light theme by default; honour system preference on first visit
+applyTheme(window.matchMedia('(prefers-color-scheme: dark)').matches);
 
-        // Initial setup
-        renderNavigation();
-        loadUpdateLog();
-        route();
-    </script>
+populateTypeFilter();
+renderNav();
+initGraph();
+route();
+</script>
 </body>
 </html>
 `

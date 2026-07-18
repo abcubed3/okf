@@ -111,4 +111,3 @@ func BuildGraph(b *bundle.Bundle) *ConceptGraph {
 
 	return g
 }
-

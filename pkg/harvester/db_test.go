@@ -72,9 +72,10 @@ func TestDBHarvester(t *testing.T) {
 	var usersConcept *bundle.Concept
 	var ordersConcept *bundle.Concept
 	for _, c := range concepts {
-		if c.ID == "tables/users" {
+		switch c.ID {
+		case "tables/users":
 			usersConcept = c
-		} else if c.ID == "tables/orders" {
+		case "tables/orders":
 			ordersConcept = c
 		}
 	}

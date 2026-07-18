@@ -60,9 +60,7 @@ func (gh *GitHarvester) Harvest(ctx context.Context) ([]*bundle.Concept, error) 
 	remotes, err := repo.Remotes()
 	if err == nil {
 		for _, r := range remotes {
-			for _, u := range r.Config().URLs {
-				remoteURLs = append(remoteURLs, u)
-			}
+			remoteURLs = append(remoteURLs, r.Config().URLs...)
 		}
 	}
 
@@ -142,11 +140,11 @@ func (gh *GitHarvester) Harvest(ctx context.Context) ([]*bundle.Concept, error) 
 		ID:   "git/repository",
 		Path: "git/repository.md",
 		Frontmatter: bundle.Frontmatter{
-			Type:        "Git Repository",
-			Title:       "Git Repository",
-			Desc:        "Summary statistics of the git repository status and history.",
-			Timestamp:   nowStr,
-			Extra:       repoExtra,
+			Type:      "Git Repository",
+			Title:     "Git Repository",
+			Desc:      "Summary statistics of the git repository status and history.",
+			Timestamp: nowStr,
+			Extra:     repoExtra,
 		},
 		Body: repoBodyBuilder.String(),
 	})
@@ -222,7 +220,8 @@ func (gh *GitHarvester) Harvest(ctx context.Context) ([]*bundle.Concept, error) 
 					limit = len(fileChanges)
 				}
 				for i := 0; i < limit; i++ {
-					commitBodyBuilder.WriteString(fileChanges[i] + "\n")
+					commitBodyBuilder.WriteString(fileChanges[i])
+					commitBodyBuilder.WriteString("\n")
 				}
 				if len(fileChanges) > limit {
 					commitBodyBuilder.WriteString(fmt.Sprintf("\n... and %d more files.", len(fileChanges)-limit))
@@ -236,11 +235,11 @@ func (gh *GitHarvester) Harvest(ctx context.Context) ([]*bundle.Concept, error) 
 			ID:   fmt.Sprintf("git/commits/%s", shortHash),
 			Path: fmt.Sprintf("git/commits/%s.md", shortHash),
 			Frontmatter: bundle.Frontmatter{
-				Type:        "Git Commit",
-				Title:       fmt.Sprintf("Commit: %s", shortHash),
-				Desc:        fmt.Sprintf("Git commit hash %s by %s.", shortHash, c.Author.Name),
-				Timestamp:   c.Author.When.Format(time.RFC3339),
-				Extra:       commitExtra,
+				Type:      "Git Commit",
+				Title:     fmt.Sprintf("Commit: %s", shortHash),
+				Desc:      fmt.Sprintf("Git commit hash %s by %s.", shortHash, c.Author.Name),
+				Timestamp: c.Author.When.Format(time.RFC3339),
+				Extra:     commitExtra,
 			},
 			Body: commitBodyBuilder.String(),
 		})
@@ -268,11 +267,11 @@ func (gh *GitHarvester) Harvest(ctx context.Context) ([]*bundle.Concept, error) 
 			ID:   fmt.Sprintf("git/contributors/%s", slug),
 			Path: fmt.Sprintf("git/contributors/%s.md", slug),
 			Frontmatter: bundle.Frontmatter{
-				Type:        "Git Contributor",
-				Title:       fmt.Sprintf("Contributor: %s", stats.Name),
-				Desc:        fmt.Sprintf("Contributor metrics for %s in this project.", stats.Name),
-				Timestamp:   nowStr,
-				Extra:       contribExtra,
+				Type:      "Git Contributor",
+				Title:     fmt.Sprintf("Contributor: %s", stats.Name),
+				Desc:      fmt.Sprintf("Contributor metrics for %s in this project.", stats.Name),
+				Timestamp: nowStr,
+				Extra:     contribExtra,
 			},
 			Body: contribBodyBuilder.String(),
 		})

@@ -61,7 +61,7 @@ func main() {
 	case "server", "mcp":
 		runServer(os.Args[2:])
 	case "lsp":
-		runLsp(os.Args[2:])
+		runLsp()
 	case "doc":
 		runDoc(os.Args[2:])
 	case "sync":
@@ -115,7 +115,7 @@ func printUsage() {
 }
 
 // runLsp starts the Language Server Protocol process.
-func runLsp(args []string) {
+func runLsp() {
 	lsp.Run()
 }
 
@@ -129,7 +129,7 @@ func runPublish(args []string) {
 	fs := flag.NewFlagSet("publish", flag.ExitOnError)
 	fs.StringVar(&host, "host", host, "OKF Hub host URL")
 	fs.StringVar(&apiKey, "api-key", apiKey, "OKF Hub API Key (or set OKF_HUB_API_KEY)")
-	fs.Parse(args)
+	_ = fs.Parse(args)
 
 	if fs.NArg() > 0 {
 		bundlePath = fs.Arg(0)
@@ -147,7 +147,6 @@ func runPublish(args []string) {
 	}
 }
 
-
 // runPull handles the pull CLI command
 func runPull(args []string) {
 	hubURI := ""
@@ -157,7 +156,7 @@ func runPull(args []string) {
 	fs := flag.NewFlagSet("pull", flag.ExitOnError)
 	fs.StringVar(&host, "host", host, "OKF Hub host URL")
 	fs.StringVar(&apiKey, "api-key", apiKey, "OKF Hub API Key (or set OKF_HUB_API_KEY)")
-	fs.Parse(args)
+	_ = fs.Parse(args)
 
 	if fs.NArg() > 0 {
 		hubURI = fs.Arg(0)
@@ -184,7 +183,7 @@ func runLint(args []string) {
 	fs := flag.NewFlagSet("lint", flag.ExitOnError)
 	fs.StringVar(&host, "host", host, "OKF Hub host URL for remote resolution")
 	fs.StringVar(&apiKey, "api-key", apiKey, "OKF Hub API Key for remote resolution")
-	fs.Parse(args)
+	_ = fs.Parse(args)
 
 	if fs.NArg() > 0 {
 		bundlePath = fs.Arg(0)
@@ -205,7 +204,7 @@ func runLint(args []string) {
 
 	fmt.Printf("Linting OKF bundle at: %s...\n", absPath)
 
-	b, err := parser.ParseBundle(absPath)
+	b, err := parser.ParseBundle(context.Background(), absPath)
 	if err != nil {
 		fmt.Printf("Error: Failed to parse bundle: %v\n", err)
 		os.Exit(1)
@@ -560,7 +559,6 @@ func runHarvestWeb(args []string) {
 	fmt.Printf("Successfully harvested %d Web concepts into %q!\n", len(concepts), *output)
 }
 
-
 // runAssemble processes a concept ID and assembles its surrounding context based on a bundle graph.
 func runAssemble(args []string) {
 	fs := flag.NewFlagSet("assemble", flag.ExitOnError)
@@ -595,7 +593,7 @@ func runAssemble(args []string) {
 		os.Exit(1)
 	}
 
-	b, err := parser.ParseBundle(absPath)
+	b, err := parser.ParseBundle(context.Background(), absPath)
 	if err != nil {
 		fmt.Printf("Error: Failed to parse bundle: %v\n", err)
 		os.Exit(1)
@@ -801,7 +799,7 @@ func runExportJSONLD(args []string) {
 		os.Exit(1)
 	}
 
-	b, err := parser.ParseBundle(absBundlePath)
+	b, err := parser.ParseBundle(context.Background(), absBundlePath)
 	if err != nil {
 		fmt.Printf("Error: Failed to parse bundle: %v\n", err)
 		os.Exit(1)
@@ -864,13 +862,13 @@ func runDiff(args []string) {
 		os.Exit(1)
 	}
 
-	bundleA, err := parser.ParseBundle(absPathA)
+	bundleA, err := parser.ParseBundle(context.Background(), absPathA)
 	if err != nil {
 		fmt.Printf("Error: Failed to parse bundle %q: %v\n", pathA, err)
 		os.Exit(1)
 	}
 
-	bundleB, err := parser.ParseBundle(absPathB)
+	bundleB, err := parser.ParseBundle(context.Background(), absPathB)
 	if err != nil {
 		fmt.Printf("Error: Failed to parse bundle %q: %v\n", pathB, err)
 		os.Exit(1)
@@ -936,13 +934,13 @@ func runMerge(args []string) {
 		os.Exit(1)
 	}
 
-	bundleSource, err := parser.ParseBundle(absSource)
+	bundleSource, err := parser.ParseBundle(context.Background(), absSource)
 	if err != nil {
 		fmt.Printf("Error: Failed to parse source bundle: %v\n", err)
 		os.Exit(1)
 	}
 
-	bundleTarget, err := parser.ParseBundle(absTarget)
+	bundleTarget, err := parser.ParseBundle(context.Background(), absTarget)
 	if err != nil {
 		fmt.Printf("Error: Failed to parse target bundle: %v\n", err)
 		os.Exit(1)
@@ -988,5 +986,3 @@ func runMerge(args []string) {
 
 	fmt.Printf("Successfully merged bundles! Written into %q\n", absOut)
 }
-
-

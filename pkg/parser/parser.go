@@ -4,6 +4,7 @@ package parser
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -32,13 +33,13 @@ func DefaultParseOptions() ParseOptions {
 
 // ParseBundle traverses the directory and parses all OKF concepts.
 // It scans the workspace for markdown files, skipping reserved documents like index.md and log.md.
-func ParseBundle(rootPath string) (*bundle.Bundle, error) {
-	return ParseBundleWithOptions(rootPath, DefaultParseOptions())
+func ParseBundle(ctx context.Context, rootPath string) (*bundle.Bundle, error) {
+	return ParseBundleWithOptions(ctx, rootPath, DefaultParseOptions())
 }
 
 // ParseBundleWithOptions parses all OKF concepts in the rootPath with custom options.
 // It parallelizes concept file parsing for scalability and restricts large files.
-func ParseBundleWithOptions(rootPath string, opts ParseOptions) (*bundle.Bundle, error) {
+func ParseBundleWithOptions(ctx context.Context, rootPath string, opts ParseOptions) (*bundle.Bundle, error) {
 	if opts.MaxFileSize <= 0 {
 		opts.MaxFileSize = 10 * 1024 * 1024 // Fallback/default to 10MB
 	}
@@ -139,27 +140,39 @@ func ParseBundleWithOptions(rootPath string, opts ParseOptions) (*bundle.Bundle,
 	for i := 0; i < numWorkers; i++ {
 		go func() {
 			defer wg.Done()
-			for job := range jobsChan {
-				var concept *bundle.Concept
-				if job.size > opts.MaxFileSize {
-					parseErr := fmt.Errorf("file size %d bytes exceeds the limit of %d bytes", job.size, opts.MaxFileSize)
-					concept = &bundle.Concept{
-						ID:         job.conceptID,
-						Path:       job.relPath,
-						ParseError: parseErr.Error(),
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case job, ok := <-jobsChan:
+					if !ok {
+						return
 					}
-				} else {
-					var parseErr error
-					concept, parseErr = ParseConceptFile(job.path, job.relPath, job.conceptID)
-					if parseErr != nil {
+					var concept *bundle.Concept
+					if job.size > opts.MaxFileSize {
+						parseErr := fmt.Errorf("file size %d bytes exceeds the limit of %d bytes", job.size, opts.MaxFileSize)
 						concept = &bundle.Concept{
 							ID:         job.conceptID,
 							Path:       job.relPath,
 							ParseError: parseErr.Error(),
 						}
+					} else {
+						var parseErr error
+						concept, parseErr = ParseConceptFile(job.path, job.relPath, job.conceptID)
+						if parseErr != nil {
+							concept = &bundle.Concept{
+								ID:         job.conceptID,
+								Path:       job.relPath,
+								ParseError: parseErr.Error(),
+							}
+						}
+					}
+					select {
+					case <-ctx.Done():
+						return
+					case resultsChan <- concept:
 					}
 				}
-				resultsChan <- concept
 			}
 		}()
 	}
@@ -200,7 +213,7 @@ func ParseConceptFile(fullPath, relPath, conceptID string) (*bundle.Concept, err
 func ParseConceptReader(r io.Reader, relPath, conceptID string) (*bundle.Concept, error) {
 	scanner := bufio.NewScanner(r)
 	var frontmatterLines []string
-	var bodyLines []string
+	var bodyBuilder strings.Builder
 
 	frontmatterChecked := false
 	hasFrontmatter := false
@@ -226,7 +239,10 @@ func ParseConceptReader(r io.Reader, relPath, conceptID string) (*bundle.Concept
 			}
 			frontmatterLines = append(frontmatterLines, line)
 		} else {
-			bodyLines = append(bodyLines, line)
+			if bodyBuilder.Len() > 0 {
+				bodyBuilder.WriteByte('\n')
+			}
+			bodyBuilder.WriteString(line)
 		}
 	}
 
@@ -234,7 +250,7 @@ func ParseConceptReader(r io.Reader, relPath, conceptID string) (*bundle.Concept
 		return nil, err
 	}
 
-	body := strings.Join(bodyLines, "\n")
+	body := bodyBuilder.String()
 	citations := ParseCitationsFromMarkdown(body)
 
 	var fm bundle.Frontmatter
@@ -293,8 +309,8 @@ func ParseCitationsFromMarkdown(body string) []bundle.Citation {
 		if inCitations {
 			matches := re.FindStringSubmatch(line)
 			if len(matches) > 0 {
-				numVal := 0
-				fmt.Sscanf(matches[1], "%d", &numVal)
+				var numVal int
+				_, _ = fmt.Sscanf(matches[1], "%d", &numVal)
 
 				title := matches[2]
 				uri := matches[3]
