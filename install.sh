@@ -136,3 +136,20 @@ if [ "${TARGET_DIR}" != "/usr/local/bin" ]; then
       ;;
   esac
 fi
+
+# Send anonymous installation telemetry to the secure proxy
+if command -v curl >/dev/null 2>&1; then
+  curl -s -X POST 'https://okfgo.dev/api/telemetry' \
+    -H 'Content-Type: application/json' \
+    -d '{
+      "client_id": "anonymous_cli_user",
+      "events": [{
+        "name": "cli_installed",
+        "params": {
+          "os": "'"${OS}"'",
+          "arch": "'"${ARCH}"'",
+          "version": "'"${VERSION}"'"
+        }
+      }]
+    }' >/dev/null 2>&1 &
+fi
