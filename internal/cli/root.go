@@ -48,6 +48,8 @@ func Execute(args []string, version, commit, date string) error {
 		return RunPublish(cmdArgs)
 	case "pull":
 		return RunPull(cmdArgs)
+	case "auth":
+		return RunAuth(cmdArgs)
 	case "version", "-v", "--version", "-version":
 		printVersion()
 		return nil
@@ -80,6 +82,7 @@ func printUsage() {
 	fmt.Println("  export <type> [flags]    Export OKF bundles to other structured metadata formats")
 	fmt.Println("  diff <path-a> <path-b>   Compare two OKF bundles for drift")
 	fmt.Println("  merge <path-a> <path-b>  Merge two OKF bundles together")
+	fmt.Println("  auth login [flags]       Login to the OKF Hub and save API Key locally")
 	fmt.Println("  publish [path] [flags]   Publish an OKF bundle to the Hub")
 	fmt.Println("  pull <uri> [flags]       Pull an OKF bundle from the Hub")
 	fmt.Println("  version, -v, --version   Print version information")

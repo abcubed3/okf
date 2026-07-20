@@ -4,9 +4,9 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"os"
 	"path/filepath"
 
+	"github.com/abcubed3/okf/pkg/config"
 	"github.com/abcubed3/okf/pkg/parser"
 	"github.com/abcubed3/okf/pkg/validator"
 )
@@ -15,14 +15,16 @@ import (
 func RunLint(args []string) error {
 	bundlePath := "."
 	host := "http://localhost:8080"
-	apiKey := os.Getenv("OKF_HUB_API_KEY")
+	apiKey := ""
 
 	fs := flag.NewFlagSet("lint", flag.ContinueOnError)
 	fs.StringVar(&host, "host", host, "OKF Hub host URL for remote resolution")
-	fs.StringVar(&apiKey, "api-key", apiKey, "OKF Hub API Key for remote resolution")
+	fs.StringVar(&apiKey, "api-key", "", "OKF Hub API Key for remote resolution")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+
+	apiKey = config.GetAPIKey(apiKey)
 
 	if fs.NArg() > 0 {
 		bundlePath = fs.Arg(0)
