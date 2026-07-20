@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/abcubed3/okf/pkg/assembly"
 	"github.com/abcubed3/okf/pkg/parser"
 )
 
@@ -24,6 +25,12 @@ type BundlePayload struct {
 	Name        string           `json:"name"`
 	Description string           `json:"description"`
 	Concepts    []PublishConcept `json:"concepts"`
+	Links       []GraphEdge      `json:"links"`
+}
+
+type GraphEdge struct {
+	From string `json:"from"`
+	To   string `json:"to"`
 }
 
 type PublishConcept struct {
@@ -64,6 +71,7 @@ func PublishBundle(bundlePath, host, apiKey string) error {
 			Name:        bundleName,
 			Description: "Published OKF Bundle: " + bundleName,
 			Concepts:    make([]PublishConcept, 0, len(b.Concepts)),
+			Links:       make([]GraphEdge, 0),
 		},
 	}
 
@@ -75,6 +83,13 @@ func PublishBundle(bundlePath, host, apiKey string) error {
 			Description: c.Frontmatter.Desc,
 			Resource:    c.Frontmatter.Resource,
 		})
+	}
+
+	graph := assembly.BuildGraph(b)
+	for fromID, node := range graph.Nodes {
+		for _, toID := range node.OutLinks {
+			payload.Bundle.Links = append(payload.Bundle.Links, GraphEdge{From: fromID, To: toID})
+		}
 	}
 
 	// 3. Serialize payload
