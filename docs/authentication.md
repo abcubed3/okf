@@ -6,11 +6,11 @@ The tool **does not** accept explicit passwords, API keys, or JSON service accou
 
 ## BigQuery
 
-When using the `bigquery` driver, the `--conn` string is treated as the **Google Cloud Project ID**.
+When using the `bigquery` driver, the `--conn` string can be either the **Google Cloud Project ID** (alongside a `--dataset` flag), or the full resource name formatted as `projects/PROJECT_ID/datasets/DATASET_ID`.
 
 ```bash
-# Example: Harvesting a BigQuery dataset
-okf harvest db --driver bigquery --conn my-gcp-project --dataset e_commerce --output ./okf-bundle
+# Example: Harvesting a BigQuery dataset using the full resource name
+okf harvest db --driver bigquery --conn "projects/my-gcp-project/datasets/e_commerce" --output ./okf-bundle
 ```
 
 ## Cloud Spanner

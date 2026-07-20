@@ -21,8 +21,7 @@ okf harvest db \
 ```bash
 okf harvest db \
   --driver bigquery \
-  --conn my-gcp-project-id \
-  --dataset e_commerce_analytics \
+  --conn "projects/my-gcp-project-id/datasets/e_commerce_analytics" \
   --output ./okf-bundle
 ```
 

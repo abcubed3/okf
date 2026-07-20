@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"cloud.google.com/go/bigquery"
 	"github.com/abcubed3/okf/pkg/ai"
@@ -308,18 +309,30 @@ func runHarvestDB(args []string) {
 	var provider harvester.SchemaProvider
 
 	if *driver == "bigquery" {
-		if *dataset == "" {
-			fmt.Println("Error: --dataset flag is required for bigquery driver.")
+		projectID := *connStr
+		ds := *dataset
+
+		// Support projects/PROJECT_ID/datasets/DATASET_ID format
+		if strings.HasPrefix(*connStr, "projects/") {
+			parts := strings.Split(*connStr, "/")
+			if len(parts) == 4 && parts[0] == "projects" && parts[2] == "datasets" {
+				projectID = parts[1]
+				ds = parts[3]
+			}
+		}
+
+		if ds == "" {
+			fmt.Println("Error: --dataset flag is required for bigquery driver, or --conn must be formatted as projects/PROJECT/datasets/DATASET.")
 			os.Exit(1)
 		}
 		ctx := context.Background()
-		client, err := bigquery.NewClient(ctx, *connStr)
+		client, err := bigquery.NewClient(ctx, projectID)
 		if err != nil {
 			fmt.Printf("Error: Failed to connect to BigQuery: %v\n", err)
 			os.Exit(1)
 		}
 		defer client.Close()
-		provider = harvester.NewBigQueryProvider(client, *dataset)
+		provider = harvester.NewBigQueryProvider(client, ds)
 	} else {
 		db, err := sql.Open(*driver, *connStr)
 		if err != nil {
