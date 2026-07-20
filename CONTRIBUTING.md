@@ -18,7 +18,7 @@ Clone the repository and compile the binary:
 
 ```bash
 # Build the binary locally
-go build -o okf main.go
+go build -o okf ./cmd/okf
 
 # Verify installation
 ./okf help
@@ -66,7 +66,7 @@ The project utilizes [Task](https://taskfile.dev) for local development and buil
 If you don't have `task` installed, you can build manually via:
 
 ```bash
-go build -o okf main.go
+go build -o okf ./cmd/okf
 ```
 
 Below is a detailed breakdown of the common commands.
