@@ -10,6 +10,7 @@ import (
 
 	"github.com/abcubed3/okf/pkg/assembly"
 	"github.com/abcubed3/okf/pkg/parser"
+	"github.com/abcubed3/okf/pkg/telemetry"
 )
 
 // RunAssemble processes a concept ID and assembles its surrounding context based on a bundle graph.
@@ -21,6 +22,7 @@ func RunAssemble(args []string) error {
 	direction := fs.String("direction", "bidirectional", "Link traversal direction: 'outbound', 'inbound', or 'bidirectional'")
 	format := fs.String("format", "xml", "Output format: 'xml' or 'markdown'")
 	monitor := fs.Bool("monitor", false, "Display visual feedback showing context window consumption")
+	remote := fs.Bool("remote", false, "Run assemble in remote tracking mode")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -44,6 +46,13 @@ func RunAssemble(args []string) error {
 	b, err := parser.ParseBundle(context.Background(), absPath)
 	if err != nil {
 		return fmt.Errorf("failed to parse bundle: %w", err)
+	}
+
+	if *remote {
+		bundleName := filepath.Base(b.Path)
+		// Import will be added manually later if needed, but let's just make sure it's injected.
+		// wait, I can just use telemetry package.
+		telemetry.SendEvent("assemble_run", bundleName)
 	}
 
 	g := assembly.BuildGraph(b)

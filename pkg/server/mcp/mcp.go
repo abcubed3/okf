@@ -1,6 +1,6 @@
-// Package server implements a Model Context Protocol (MCP) server for OKF.
+// Package mcp implements a Model Context Protocol (MCP) server for OKF.
 // It exposes resources, prompts, and tools to search and assemble context from the concept graph.
-package server
+package mcp
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 	"github.com/abcubed3/okf/pkg/bundle"
 	"github.com/abcubed3/okf/pkg/parser"
 	"github.com/fsnotify/fsnotify"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
+	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"gopkg.in/yaml.v3"
 )
 
@@ -24,7 +24,7 @@ type Server struct {
 	// bundlePath is the absolute path to the bundle directory.
 	bundlePath string
 	// sdkServer is the underlying Model Context Protocol SDK server instance.
-	sdkServer *mcp.Server
+	sdkServer *sdk.Server
 	// Token is an optional authentication token for SSE transport.
 	Token string
 
@@ -50,8 +50,8 @@ func NewMCPServer(bundlePath string) (*Server, error) {
 	}
 	g := assembly.BuildGraph(b)
 
-	sdkServer := mcp.NewServer(
-		&mcp.Implementation{
+	sdkServer := sdk.NewServer(
+		&sdk.Implementation{
 			Name:    "okf-server",
 			Version: "1.0.0",
 		},
@@ -74,12 +74,12 @@ func NewMCPServer(bundlePath string) (*Server, error) {
 // registerCapabilities registers resources, tools, and prompts with the MCP Server.
 func (s *Server) registerCapabilities() {
 	// 1. Resources: okf://index
-	s.sdkServer.AddResource(&mcp.Resource{
+	s.sdkServer.AddResource(&sdk.Resource{
 		URI:         "okf://index",
 		Name:        "OKF Bundle Index",
 		MIMEType:    "text/markdown",
 		Description: "List of all concepts in the OKF bundle",
-	}, func(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+	}, func(ctx context.Context, req *sdk.ReadResourceRequest) (*sdk.ReadResourceResult, error) {
 		s.mu.RLock()
 		defer s.mu.RUnlock()
 
@@ -88,8 +88,8 @@ func (s *Server) registerCapabilities() {
 		for _, c := range s.bundle.Concepts {
 			indexBuilder.WriteString(fmt.Sprintf("- [%s](okf://concept/%s) (%s): %s\n", c.Frontmatter.Title, c.ID, c.Frontmatter.Type, c.Frontmatter.Desc))
 		}
-		return &mcp.ReadResourceResult{
-			Contents: []*mcp.ResourceContents{
+		return &sdk.ReadResourceResult{
+			Contents: []*sdk.ResourceContents{
 				{
 					URI:      "okf://index",
 					MIMEType: "text/markdown",
@@ -100,12 +100,12 @@ func (s *Server) registerCapabilities() {
 	})
 
 	// 2. Resource Template: okf://concept/{id}
-	s.sdkServer.AddResourceTemplate(&mcp.ResourceTemplate{
+	s.sdkServer.AddResourceTemplate(&sdk.ResourceTemplate{
 		URITemplate: "okf://concept/{+id}",
 		Name:        "OKF Concept Document",
 		MIMEType:    "text/markdown",
 		Description: "Raw OKF concept document including frontmatter and body",
-	}, func(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+	}, func(ctx context.Context, req *sdk.ReadResourceRequest) (*sdk.ReadResourceResult, error) {
 		s.mu.RLock()
 		defer s.mu.RUnlock()
 
@@ -116,8 +116,8 @@ func (s *Server) registerCapabilities() {
 			return nil, fmt.Errorf("concept %q not found", id)
 		}
 		content := formatRawConcept(concept)
-		return &mcp.ReadResourceResult{
-			Contents: []*mcp.ResourceContents{
+		return &sdk.ReadResourceResult{
+			Contents: []*sdk.ResourceContents{
 				{
 					URI:      uri,
 					MIMEType: "text/markdown",
@@ -128,10 +128,10 @@ func (s *Server) registerCapabilities() {
 	})
 
 	// 3. Prompts: okf_concept_context
-	s.sdkServer.AddPrompt(&mcp.Prompt{
+	s.sdkServer.AddPrompt(&sdk.Prompt{
 		Name:        "okf_concept_context",
 		Description: "Generate context for a concept and ask the model to analyze it",
-		Arguments: []*mcp.PromptArgument{
+		Arguments: []*sdk.PromptArgument{
 			{
 				Name:        "id",
 				Description: "The ID of the concept to start the analysis from (e.g. tables/users)",
@@ -143,7 +143,7 @@ func (s *Server) registerCapabilities() {
 				Required:    false,
 			},
 		},
-	}, func(ctx context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+	}, func(ctx context.Context, req *sdk.GetPromptRequest) (*sdk.GetPromptResult, error) {
 		s.mu.RLock()
 		defer s.mu.RUnlock()
 
@@ -170,12 +170,12 @@ func (s *Server) registerCapabilities() {
 
 		promptText := fmt.Sprintf("Analyze the following assembled context related to concept %q:\n\n%s\n\nProvide a comprehensive summary of this concept, its metadata, and how it relates to other concepts in the graph.", id, res.Context)
 
-		return &mcp.GetPromptResult{
+		return &sdk.GetPromptResult{
 			Description: fmt.Sprintf("Analysis prompt for concept %q", id),
-			Messages: []*mcp.PromptMessage{
+			Messages: []*sdk.PromptMessage{
 				{
-					Role: mcp.Role("user"),
-					Content: &mcp.TextContent{
+					Role: sdk.Role("user"),
+					Content: &sdk.TextContent{
 						Text: promptText,
 					},
 				},
@@ -184,22 +184,22 @@ func (s *Server) registerCapabilities() {
 	})
 
 	// 4. Tools
-	mcp.AddTool(s.sdkServer, &mcp.Tool{
+	sdk.AddTool(s.sdkServer, &sdk.Tool{
 		Name:        "list_concepts",
 		Description: "List all concepts in the OKF bundle with their types and descriptions.",
 	}, s.handleListConcepts)
 
-	mcp.AddTool(s.sdkServer, &mcp.Tool{
+	sdk.AddTool(s.sdkServer, &sdk.Tool{
 		Name:        "search_concepts",
 		Description: "Search concepts in the OKF bundle by query (matching ID, title, description, or tags) or filter by type or tag.",
 	}, s.handleSearchConcepts)
 
-	mcp.AddTool(s.sdkServer, &mcp.Tool{
+	sdk.AddTool(s.sdkServer, &sdk.Tool{
 		Name:        "get_concept",
 		Description: "Retrieve a specific OKF concept document by its unique ID (e.g. tables/users).",
 	}, s.handleGetConcept)
 
-	mcp.AddTool(s.sdkServer, &mcp.Tool{
+	sdk.AddTool(s.sdkServer, &sdk.Tool{
 		Name:        "assemble_context",
 		Description: "Build a pruned, cohesive context subset of the concept graph starting from a concept ID, traversing related links.",
 	}, s.handleAssembleContext)
@@ -210,7 +210,7 @@ func (s *Server) StartStdio(ctx context.Context) error {
 	if err := s.StartWatcher(ctx); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: Failed to start file watcher: %v\n", err)
 	}
-	transport := &mcp.StdioTransport{}
+	transport := &sdk.StdioTransport{}
 	return s.sdkServer.Run(ctx, transport)
 }
 
@@ -223,7 +223,7 @@ func (s *Server) StartSSE(addr string) error {
 		fmt.Fprintf(os.Stderr, "Warning: Failed to start file watcher: %v\n", err)
 	}
 
-	handler := mcp.NewStreamableHTTPHandler(func(req *http.Request) *mcp.Server {
+	handler := sdk.NewStreamableHTTPHandler(func(req *http.Request) *sdk.Server {
 		return s.sdkServer
 	}, nil)
 
@@ -416,7 +416,7 @@ type ListConceptsResult struct {
 }
 
 // handleListConcepts returns a summary list of all available concepts in the bundle.
-func (s *Server) handleListConcepts(ctx context.Context, req *mcp.CallToolRequest, args ListConceptsArgs) (*mcp.CallToolResult, ListConceptsResult, error) {
+func (s *Server) handleListConcepts(ctx context.Context, req *sdk.CallToolRequest, args ListConceptsArgs) (*sdk.CallToolResult, ListConceptsResult, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -430,9 +430,9 @@ func (s *Server) handleListConcepts(ctx context.Context, req *mcp.CallToolReques
 			Tags:        c.Frontmatter.Tags,
 		})
 	}
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{
-			&mcp.TextContent{
+	return &sdk.CallToolResult{
+		Content: []sdk.Content{
+			&sdk.TextContent{
 				Text: fmt.Sprintf("Found %d concepts in the bundle.", len(list)),
 			},
 		},
@@ -452,7 +452,7 @@ type SearchConceptsResult struct {
 }
 
 // handleSearchConcepts executes searching and filtering based on the provided SearchConceptsArgs.
-func (s *Server) handleSearchConcepts(ctx context.Context, req *mcp.CallToolRequest, args SearchConceptsArgs) (*mcp.CallToolResult, SearchConceptsResult, error) {
+func (s *Server) handleSearchConcepts(ctx context.Context, req *sdk.CallToolRequest, args SearchConceptsArgs) (*sdk.CallToolResult, SearchConceptsResult, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -503,9 +503,9 @@ func (s *Server) handleSearchConcepts(ctx context.Context, req *mcp.CallToolRequ
 		})
 	}
 
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{
-			&mcp.TextContent{
+	return &sdk.CallToolResult{
+		Content: []sdk.Content{
+			&sdk.TextContent{
 				Text: fmt.Sprintf("Found %d search results.", len(results)),
 			},
 		},
@@ -526,7 +526,7 @@ type GetConceptResult struct {
 }
 
 // handleGetConcept retrieves a specific OKF concept document by its unique ID.
-func (s *Server) handleGetConcept(ctx context.Context, req *mcp.CallToolRequest, args GetConceptArgs) (*mcp.CallToolResult, GetConceptResult, error) {
+func (s *Server) handleGetConcept(ctx context.Context, req *sdk.CallToolRequest, args GetConceptArgs) (*sdk.CallToolResult, GetConceptResult, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -537,9 +537,9 @@ func (s *Server) handleGetConcept(ctx context.Context, req *mcp.CallToolRequest,
 
 	rawContent := formatRawConcept(c)
 
-	return &mcp.CallToolResult{
-			Content: []mcp.Content{
-				&mcp.TextContent{
+	return &sdk.CallToolResult{
+			Content: []sdk.Content{
+				&sdk.TextContent{
 					Text: rawContent,
 				},
 			},
@@ -569,7 +569,7 @@ type AssembleContextResult struct {
 }
 
 // handleAssembleContext builds a pruned, cohesive context subset starting from a concept ID.
-func (s *Server) handleAssembleContext(ctx context.Context, req *mcp.CallToolRequest, args AssembleContextArgs) (*mcp.CallToolResult, AssembleContextResult, error) {
+func (s *Server) handleAssembleContext(ctx context.Context, req *sdk.CallToolRequest, args AssembleContextArgs) (*sdk.CallToolResult, AssembleContextResult, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -594,9 +594,9 @@ func (s *Server) handleAssembleContext(ctx context.Context, req *mcp.CallToolReq
 		return nil, AssembleContextResult{}, err
 	}
 
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{
-			&mcp.TextContent{
+	return &sdk.CallToolResult{
+		Content: []sdk.Content{
+			&sdk.TextContent{
 				Text: res.Context,
 			},
 		},

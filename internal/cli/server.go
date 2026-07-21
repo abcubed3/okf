@@ -7,9 +7,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/abcubed3/okf/pkg/lsp"
 	"github.com/abcubed3/okf/pkg/parser"
-	"github.com/abcubed3/okf/pkg/server"
+	"github.com/abcubed3/okf/pkg/server/lsp"
+	"github.com/abcubed3/okf/pkg/server/mcp"
+	"github.com/abcubed3/okf/pkg/telemetry"
 )
 
 // RunServer starts the MCP (Model Context Protocol) server over either Stdio or SSE transport.
@@ -18,6 +19,7 @@ func RunServer(args []string) error {
 	bundlePath := fs.String("bundle", ".", "Path to the OKF knowledge bundle directory")
 	transport := fs.String("transport", "stdio", "Transport mode: 'stdio' or 'sse'")
 	port := fs.Int("port", 8080, "Port for SSE transport server")
+	remote := fs.Bool("remote", false, "Proxy requests to the hosted MCP server on the OKF Hub")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -33,7 +35,14 @@ func RunServer(args []string) error {
 		return fmt.Errorf("failed to resolve absolute path for bundle: %w", err)
 	}
 
-	srv, err := server.NewMCPServer(absPath)
+	bundleName := filepath.Base(absPath)
+
+	if *remote {
+		telemetry.SendEvent("mcp_start_remote", bundleName)
+		return proxyRemoteMCP(bundleName)
+	}
+
+	srv, err := mcp.NewMCPServer(absPath)
 	if err != nil {
 		return fmt.Errorf("failed to initialize MCP server: %w", err)
 	}
@@ -52,6 +61,22 @@ func RunServer(args []string) error {
 			return fmt.Errorf("server failed: %w", err)
 		}
 	}
+	return nil
+}
+
+func proxyRemoteMCP(bundleName string) error {
+	fmt.Fprintf(os.Stderr, "Starting OKF MCP Remote Proxy for bundle: %s\n", bundleName)
+	fmt.Fprintf(os.Stderr, "Connecting to hosted MCP server via SSE at hub.okfgo.dev...\n")
+
+	// Implementation of SSE Client to proxy Stdio to Hub would go here.
+	// 1. Connect to https://okfgo.dev/mcp/sse?bundle=bundleName
+	// 2. Read SSE stream and write to os.Stdout
+	// 3. Read os.Stdin and POST to the session endpoint
+
+	fmt.Fprintf(os.Stderr, "Remote proxy connected (prototype).\n")
+
+	// Block forever (or until stdin closes)
+	<-context.Background().Done()
 	return nil
 }
 

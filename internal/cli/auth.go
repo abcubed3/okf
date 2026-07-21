@@ -62,7 +62,7 @@ func RunAuthLogin(args []string) error {
 
 		// Success response with auto-close attempt
 		w.Header().Set("Content-Type", "text/html")
-		w.Write([]byte(`
+		_, _ = w.Write([]byte(`
 			<!DOCTYPE html>
 			<html>
 			<head><title>OKF Auth Successful</title></head>

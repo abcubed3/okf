@@ -1,28 +1,28 @@
-package server
+package mcp
 
 import (
 	"context"
 	"strings"
 	"testing"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
+	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // newTestSession creates an in-memory connected MCP session against the sample testdata.
 // It returns the session and a cancel function; the caller must call cancel() to clean up.
-func newTestSession(t *testing.T) (*mcp.ClientSession, context.CancelFunc) {
+func newTestSession(t *testing.T) (*sdk.ClientSession, context.CancelFunc) {
 	t.Helper()
-	srv, err := NewMCPServer("../../testdata/bundles/sample")
+	srv, err := NewMCPServer("../../../testdata/bundles/sample")
 	if err != nil {
 		t.Fatalf("failed to create server: %v", err)
 	}
 
-	clientTransport, serverTransport := mcp.NewInMemoryTransports()
+	clientTransport, serverTransport := sdk.NewInMemoryTransports()
 	ctx, cancel := context.WithCancel(context.Background())
 
 	go func() { _ = srv.sdkServer.Run(ctx, serverTransport) }()
 
-	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "1.0.0"}, nil)
+	client := sdk.NewClient(&sdk.Implementation{Name: "test-client", Version: "1.0.0"}, nil)
 	session, err := client.Connect(ctx, clientTransport, nil)
 	if err != nil {
 		cancel()
@@ -37,13 +37,13 @@ func newTestSession(t *testing.T) (*mcp.ClientSession, context.CancelFunc) {
 
 func TestMCPServer(t *testing.T) {
 	// Create a real server pointing to our testdata sample
-	srv, err := NewMCPServer("../../testdata/bundles/sample")
+	srv, err := NewMCPServer("../../../testdata/bundles/sample")
 	if err != nil {
 		t.Fatalf("failed to create server: %v", err)
 	}
 
 	// Connect client and server via in-memory transport
-	clientTransport, serverTransport := mcp.NewInMemoryTransports()
+	clientTransport, serverTransport := sdk.NewInMemoryTransports()
 
 	// Start server in background
 	ctx, cancel := context.WithCancel(context.Background())
@@ -55,7 +55,7 @@ func TestMCPServer(t *testing.T) {
 	}()
 
 	// Start client
-	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "1.0.0"}, nil)
+	client := sdk.NewClient(&sdk.Implementation{Name: "test-client", Version: "1.0.0"}, nil)
 	session, err := client.Connect(ctx, clientTransport, nil)
 	if err != nil {
 		t.Fatalf("failed to connect client: %v", err)
@@ -101,7 +101,7 @@ func TestMCPServer(t *testing.T) {
 	}
 
 	// 3. Test Read resource
-	resResult, err := session.ReadResource(ctx, &mcp.ReadResourceParams{URI: "okf://index"})
+	resResult, err := session.ReadResource(ctx, &sdk.ReadResourceParams{URI: "okf://index"})
 	if err != nil {
 		t.Fatalf("failed to read resource okf://index: %v", err)
 	}
@@ -110,7 +110,7 @@ func TestMCPServer(t *testing.T) {
 	}
 
 	// 4. Test Resource template read (e.g. okf://concept/tables/users)
-	conceptRes, err := session.ReadResource(ctx, &mcp.ReadResourceParams{URI: "okf://concept/tables/users"})
+	conceptRes, err := session.ReadResource(ctx, &sdk.ReadResourceParams{URI: "okf://concept/tables/users"})
 	if err != nil {
 		t.Fatalf("failed to read concept resource: %v", err)
 	}
@@ -128,7 +128,7 @@ func TestMCPServer(t *testing.T) {
 	}
 
 	// 6. Test Get prompt
-	promptResult, err := session.GetPrompt(ctx, &mcp.GetPromptParams{
+	promptResult, err := session.GetPrompt(ctx, &sdk.GetPromptParams{
 		Name: "okf_concept_context",
 		Arguments: map[string]string{
 			"id":    "tables/users",
@@ -138,24 +138,24 @@ func TestMCPServer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to get prompt: %v", err)
 	}
-	if len(promptResult.Messages) != 1 || !strings.Contains(promptResult.Messages[0].Content.(*mcp.TextContent).Text, "Analyze the following assembled context") {
+	if len(promptResult.Messages) != 1 || !strings.Contains(promptResult.Messages[0].Content.(*sdk.TextContent).Text, "Analyze the following assembled context") {
 		t.Errorf("unexpected prompt messages content: %v", promptResult.Messages)
 	}
 
 	// 7. Test CallTool - list_concepts
-	listCallParams := &mcp.CallToolParams{
+	listCallParams := &sdk.CallToolParams{
 		Name: "list_concepts",
 	}
 	listCallResult, err := session.CallTool(ctx, listCallParams)
 	if err != nil {
 		t.Fatalf("failed to call list_concepts: %v", err)
 	}
-	if !strings.Contains(listCallResult.Content[0].(*mcp.TextContent).Text, "Found") {
-		t.Errorf("unexpected list_concepts output: %s", listCallResult.Content[0].(*mcp.TextContent).Text)
+	if !strings.Contains(listCallResult.Content[0].(*sdk.TextContent).Text, "Found") {
+		t.Errorf("unexpected list_concepts output: %s", listCallResult.Content[0].(*sdk.TextContent).Text)
 	}
 
 	// 8. Test CallTool - search_concepts (filter by type)
-	searchCallParams := &mcp.CallToolParams{
+	searchCallParams := &sdk.CallToolParams{
 		Name: "search_concepts",
 		Arguments: map[string]any{
 			"type": "BigQuery Table",
@@ -165,8 +165,8 @@ func TestMCPServer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to call search_concepts: %v", err)
 	}
-	if !strings.Contains(searchCallResult.Content[0].(*mcp.TextContent).Text, "Found") {
-		t.Errorf("unexpected search_concepts output: %s", searchCallResult.Content[0].(*mcp.TextContent).Text)
+	if !strings.Contains(searchCallResult.Content[0].(*sdk.TextContent).Text, "Found") {
+		t.Errorf("unexpected search_concepts output: %s", searchCallResult.Content[0].(*sdk.TextContent).Text)
 	}
 }
 
@@ -175,7 +175,7 @@ func TestMCPServer_GetConcept(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("existing concept", func(t *testing.T) {
-		result, err := session.CallTool(ctx, &mcp.CallToolParams{
+		result, err := session.CallTool(ctx, &sdk.CallToolParams{
 			Name:      "get_concept",
 			Arguments: map[string]any{"id": "tables/users"},
 		})
@@ -185,7 +185,7 @@ func TestMCPServer_GetConcept(t *testing.T) {
 		if result.IsError {
 			t.Fatalf("get_concept returned error: %v", result.Content)
 		}
-		text := result.Content[0].(*mcp.TextContent).Text
+		text := result.Content[0].(*sdk.TextContent).Text
 		if !strings.Contains(text, "Users Table") {
 			t.Errorf("expected 'Users Table' in response, got: %s", text)
 		}
@@ -196,7 +196,7 @@ func TestMCPServer_GetConcept(t *testing.T) {
 	})
 
 	t.Run("nonexistent concept", func(t *testing.T) {
-		result, err := session.CallTool(ctx, &mcp.CallToolParams{
+		result, err := session.CallTool(ctx, &sdk.CallToolParams{
 			Name:      "get_concept",
 			Arguments: map[string]any{"id": "nonexistent/concept"},
 		})
@@ -206,7 +206,7 @@ func TestMCPServer_GetConcept(t *testing.T) {
 		}
 		// Either IsError is set or the text contains "not found"
 		if !result.IsError {
-			text := result.Content[0].(*mcp.TextContent).Text
+			text := result.Content[0].(*sdk.TextContent).Text
 			if !strings.Contains(strings.ToLower(text), "not found") {
 				t.Errorf("expected 'not found' for missing concept, got: %s", text)
 			}
@@ -219,7 +219,7 @@ func TestMCPServer_AssembleContext(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("basic assembly", func(t *testing.T) {
-		result, err := session.CallTool(ctx, &mcp.CallToolParams{
+		result, err := session.CallTool(ctx, &sdk.CallToolParams{
 			Name: "assemble_context",
 			Arguments: map[string]any{
 				"id": "tables/users",
@@ -231,7 +231,7 @@ func TestMCPServer_AssembleContext(t *testing.T) {
 		if result.IsError {
 			t.Fatalf("assemble_context returned error: %v", result.Content)
 		}
-		text := result.Content[0].(*mcp.TextContent).Text
+		text := result.Content[0].(*sdk.TextContent).Text
 		if text == "" {
 			t.Error("expected non-empty assembled context")
 		}
@@ -239,7 +239,7 @@ func TestMCPServer_AssembleContext(t *testing.T) {
 
 	t.Run("with depth constraint", func(t *testing.T) {
 		depth := 1
-		result, err := session.CallTool(ctx, &mcp.CallToolParams{
+		result, err := session.CallTool(ctx, &sdk.CallToolParams{
 			Name: "assemble_context",
 			Arguments: map[string]any{
 				"id":    "tables/users",
@@ -256,7 +256,7 @@ func TestMCPServer_AssembleContext(t *testing.T) {
 
 	t.Run("with markdown format", func(t *testing.T) {
 		format := "markdown"
-		result, err := session.CallTool(ctx, &mcp.CallToolParams{
+		result, err := session.CallTool(ctx, &sdk.CallToolParams{
 			Name: "assemble_context",
 			Arguments: map[string]any{
 				"id":     "tables/users",
@@ -272,7 +272,7 @@ func TestMCPServer_AssembleContext(t *testing.T) {
 	})
 
 	t.Run("with char budget", func(t *testing.T) {
-		result, err := session.CallTool(ctx, &mcp.CallToolParams{
+		result, err := session.CallTool(ctx, &sdk.CallToolParams{
 			Name: "assemble_context",
 			Arguments: map[string]any{
 				"id":        "tables/users",
@@ -285,7 +285,7 @@ func TestMCPServer_AssembleContext(t *testing.T) {
 		if result.IsError {
 			t.Fatalf("assemble_context with char budget returned error")
 		}
-		text := result.Content[0].(*mcp.TextContent).Text
+		text := result.Content[0].(*sdk.TextContent).Text
 		// With a tight char budget, the output should still be valid
 		if len(text) == 0 {
 			t.Error("expected non-empty response even with tight budget")
@@ -293,7 +293,7 @@ func TestMCPServer_AssembleContext(t *testing.T) {
 	})
 
 	t.Run("nonexistent start concept", func(t *testing.T) {
-		result, err := session.CallTool(ctx, &mcp.CallToolParams{
+		result, err := session.CallTool(ctx, &sdk.CallToolParams{
 			Name: "assemble_context",
 			Arguments: map[string]any{
 				"id": "nonexistent/concept",
@@ -304,7 +304,7 @@ func TestMCPServer_AssembleContext(t *testing.T) {
 		}
 		// Either the result is an error or has an error message
 		if !result.IsError {
-			text := result.Content[0].(*mcp.TextContent).Text
+			text := result.Content[0].(*sdk.TextContent).Text
 			if !strings.Contains(strings.ToLower(text), "not found") && !strings.Contains(strings.ToLower(text), "error") {
 				t.Logf("assemble_context nonexistent concept response: %s", text)
 			}
@@ -317,7 +317,7 @@ func TestMCPServer_SearchConcepts(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("search by query keyword", func(t *testing.T) {
-		result, err := session.CallTool(ctx, &mcp.CallToolParams{
+		result, err := session.CallTool(ctx, &sdk.CallToolParams{
 			Name:      "search_concepts",
 			Arguments: map[string]any{"query": "users"},
 		})
@@ -327,14 +327,14 @@ func TestMCPServer_SearchConcepts(t *testing.T) {
 		if result.IsError {
 			t.Fatalf("search_concepts returned error")
 		}
-		text := result.Content[0].(*mcp.TextContent).Text
+		text := result.Content[0].(*sdk.TextContent).Text
 		if !strings.Contains(text, "Found") {
 			t.Errorf("expected 'Found' in search results, got: %s", text)
 		}
 	})
 
 	t.Run("search by tag", func(t *testing.T) {
-		result, err := session.CallTool(ctx, &mcp.CallToolParams{
+		result, err := session.CallTool(ctx, &sdk.CallToolParams{
 			Name:      "search_concepts",
 			Arguments: map[string]any{"tag": "ecommerce"},
 		})
@@ -344,14 +344,14 @@ func TestMCPServer_SearchConcepts(t *testing.T) {
 		if result.IsError {
 			t.Fatalf("search_concepts by tag returned error")
 		}
-		text := result.Content[0].(*mcp.TextContent).Text
+		text := result.Content[0].(*sdk.TextContent).Text
 		if !strings.Contains(text, "Found") {
 			t.Errorf("expected 'Found' in tag search results, got: %s", text)
 		}
 	})
 
 	t.Run("search with no matches", func(t *testing.T) {
-		result, err := session.CallTool(ctx, &mcp.CallToolParams{
+		result, err := session.CallTool(ctx, &sdk.CallToolParams{
 			Name:      "search_concepts",
 			Arguments: map[string]any{"query": "zzz_definitely_no_match_xyz"},
 		})
@@ -361,7 +361,7 @@ func TestMCPServer_SearchConcepts(t *testing.T) {
 		if result.IsError {
 			t.Fatalf("search_concepts returned error for empty results")
 		}
-		text := result.Content[0].(*mcp.TextContent).Text
+		text := result.Content[0].(*sdk.TextContent).Text
 		if !strings.Contains(text, "Found 0") {
 			t.Errorf("expected 'Found 0' for no-match query, got: %s", text)
 		}

@@ -46,6 +46,8 @@ func Execute(args []string, version, commit, date string) error {
 		return RunMerge(cmdArgs)
 	case "publish":
 		return RunPublish(cmdArgs)
+	case "push":
+		return RunPush(cmdArgs)
 	case "pull":
 		return RunPull(cmdArgs)
 	case "auth":
@@ -84,6 +86,7 @@ func printUsage() {
 	fmt.Println("  merge <path-a> <path-b>  Merge two OKF bundles together")
 	fmt.Println("  auth login [flags]       Login to the OKF Hub and save API Key locally")
 	fmt.Println("  publish [path] [flags]   Publish an OKF bundle to the Hub")
+	fmt.Println("  push [path] [flags]      Push incremental updates to an OKF bundle")
 	fmt.Println("  pull <uri> [flags]       Pull an OKF bundle from the Hub")
 	fmt.Println("  version, -v, --version   Print version information")
 	fmt.Println("  help, -h, --help         Display help information")

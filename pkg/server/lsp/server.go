@@ -53,8 +53,6 @@ func (s *Server) buildHandler() *protocol.Handler {
 		TextDocumentDidChange: s.textDocumentDidChange,
 		TextDocumentDidSave:   s.textDocumentDidSave,
 		TextDocumentDidClose:  s.textDocumentDidClose,
-		// Hover and Definition are not yet implemented; we omit them from
-		// capabilities so the editor does not wait for a response that never comes.
 	}
 }
 
@@ -62,11 +60,7 @@ func (s *Server) buildHandler() *protocol.Handler {
 // It advertises the server capabilities and captures the workspace root URI.
 func (s *Server) initialize(context *glsp.Context, params *protocol.InitializeParams) (any, error) {
 	capabilities := protocol.ServerCapabilities{
-		// Full document sync: the client sends the entire content on every change.
 		TextDocumentSync: protocol.TextDocumentSyncKindFull,
-		// Hover and Definition are intentionally NOT advertised until they are
-		// implemented — advertising unimplemented capabilities leaves the editor
-		// spinner hanging indefinitely.
 	}
 
 	s.mu.Lock()
@@ -121,8 +115,6 @@ func (s *Server) textDocumentDidChange(context *glsp.Context, params *protocol.D
 	if len(params.ContentChanges) == 0 {
 		return nil
 	}
-	// The server requests TextDocumentSyncKindFull, so the first change always
-	// contains the complete document text.
 	change, ok := params.ContentChanges[0].(protocol.TextDocumentContentChangeEventWhole)
 	if !ok {
 		return nil
@@ -138,7 +130,6 @@ func (s *Server) textDocumentDidSave(context *glsp.Context, params *protocol.Did
 }
 
 func (s *Server) textDocumentDidClose(context *glsp.Context, params *protocol.DidCloseTextDocumentParams) error {
-	// Clear diagnostics for the closed file so stale errors don't persist.
 	context.Notify(protocol.ServerTextDocumentPublishDiagnostics, protocol.PublishDiagnosticsParams{
 		URI:         params.TextDocument.URI,
 		Diagnostics: []protocol.Diagnostic{},
@@ -160,7 +151,6 @@ func (s *Server) parseAndValidate(context *glsp.Context, uri string, content str
 	filePath := uriToPath(uri)
 	relPath, err := filepath.Rel(root, filePath)
 	if err != nil {
-		// Cannot determine relative path; skip
 		return nil
 	}
 	conceptID := strings.TrimSuffix(filepath.ToSlash(relPath), ".md")
@@ -179,7 +169,6 @@ func (s *Server) parseAndValidate(context *glsp.Context, uri string, content str
 		s.activeBundle = bundle.NewBundle(root)
 	}
 	s.activeBundle.Concepts[conceptID] = c
-	// Snapshot the bundle pointer so we can release the lock before validating.
 	b := s.activeBundle
 	s.mu.Unlock()
 
@@ -216,13 +205,9 @@ func (s *Server) parseAndValidate(context *glsp.Context, uri string, content str
 	return nil
 }
 
-// uriToPath converts an LSP file:// URI to an OS filesystem path.
-// It handles both file:// (2 slashes) and file:/// (3 slashes) forms and
-// percent-decodes any escaped characters (e.g. spaces as %20).
 func uriToPath(uri string) string {
 	u, err := url.Parse(uri)
 	if err != nil {
-		// Fall back to naive string trimming if URL parsing fails.
 		path := strings.TrimPrefix(uri, "file://")
 		return path
 	}
