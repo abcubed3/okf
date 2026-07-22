@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/abcubed3/okf/pkg/config"
 )
@@ -92,11 +93,14 @@ func RunAuthLogin(args []string) error {
 
 	select {
 	case t := <-tokenChan:
-		// Shut down server
-		server.Close()
+		// Shut down server asynchronously after short delay to allow browser response to finish
+		go func() {
+			time.Sleep(200 * time.Millisecond)
+			_ = server.Close()
+		}()
 		return saveToken(t)
 	case err := <-errChan:
-		server.Close()
+		_ = server.Close()
 		return err
 	}
 }
