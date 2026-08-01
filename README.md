@@ -1,4 +1,14 @@
-# OKF-go — Open Knowledge Format Tool
+<p align="center">
+  <img src="logo.png" alt="OKF-go Logo" width="220" />
+</p>
+
+<h1 align="center">OKF-go — Open Knowledge Format Tool Suite</h1>
+
+<p align="center">
+  <b>A high-performance Open Knowledge Format (OKF) tool suite written in Go for AI Agents, Context Traversal, and Model Context Protocol.</b>
+</p>
+
+---
 
 The **Open Knowledge Format (OKF)** is a vendor-neutral, lightweight specification for structuring organizational knowledge (documentation, runbooks, metrics, database schemas, and API definitions) into machine-readable, human-friendly Markdown files.
 

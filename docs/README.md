@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="../logo.png" alt="OKF-go Logo" width="180" />
+</p>
+
 # OKF-go Documentation
 
 Welcome to the detailed documentation for the Open Knowledge Format (OKF) Go tool suite.
