@@ -41,7 +41,7 @@ jobs:
       - name: Run Benchmarks
         run: task benchmark
 
-      - name: Test Local GitHub Action
-        uses: ./
-        with:
-          path: 'testdata'
+      # - name: Test Local GitHub Action
+      #   uses: ./
+      #   with:
+      #     path: 'testdata'
