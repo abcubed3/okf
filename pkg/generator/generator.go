@@ -36,6 +36,16 @@ type ConceptJSON struct {
 	Tags []string `json:"tags,omitempty"`
 	// Timestamp is the RFC3339 formatted generation/update time.
 	Timestamp string `json:"timestamp,omitempty"`
+
+	// --- OKF v0.2 Trust Signals ---
+	Status      string              `json:"status,omitempty"`
+	TrustTier   string              `json:"trustTier,omitempty"`
+	StaleAfter  string              `json:"staleAfter,omitempty"`
+	Sources     []bundle.Source     `json:"sources,omitempty"`
+	Generated   *bundle.ActorInfo   `json:"generated,omitempty"`
+	Verified    []bundle.ActorInfo  `json:"verified,omitempty"`
+	Attestation *bundle.Attestation `json:"attestation,omitempty"`
+
 	// Body is the raw markdown content of this concept.
 	Body string `json:"body"`
 	// Citations holds the list of supporting citations.
@@ -58,6 +68,12 @@ type ConceptIndexEntry struct {
 	Tags []string `json:"tags,omitempty"`
 	// Timestamp is the RFC3339 formatted generation/update time.
 	Timestamp string `json:"timestamp,omitempty"`
+
+	// --- OKF v0.2 Trust Signals ---
+	Status     string `json:"status,omitempty"`
+	TrustTier  string `json:"trustTier,omitempty"`
+	StaleAfter string `json:"staleAfter,omitempty"`
+
 	// Excerpt is a short snippet of the body content for search.
 	Excerpt string `json:"excerpt,omitempty"`
 }
@@ -175,6 +191,9 @@ func Generate(bundlePath, outputPath string) error {
 			Resource:    c.Frontmatter.Resource,
 			Tags:        c.Frontmatter.Tags,
 			Timestamp:   c.Frontmatter.Timestamp,
+			Status:      c.Frontmatter.Status,
+			TrustTier:   c.TrustTier(),
+			StaleAfter:  c.Frontmatter.StaleAfter,
 			Excerpt:     excerpt,
 		}
 	}
@@ -201,6 +220,13 @@ func Generate(bundlePath, outputPath string) error {
 				Resource:    c.Frontmatter.Resource,
 				Tags:        c.Frontmatter.Tags,
 				Timestamp:   c.Frontmatter.Timestamp,
+				Status:      c.Frontmatter.Status,
+				TrustTier:   c.TrustTier(),
+				StaleAfter:  c.Frontmatter.StaleAfter,
+				Sources:     c.Frontmatter.Sources,
+				Generated:   c.Frontmatter.Generated,
+				Verified:    c.Frontmatter.Verified,
+				Attestation: c.Frontmatter.Attestation,
 				Body:        c.Body,
 				Citations:   c.Citations,
 			}

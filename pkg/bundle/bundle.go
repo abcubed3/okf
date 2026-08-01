@@ -1,7 +1,10 @@
 // Package bundle defines the core structures for an OKF (Open Knowledge Format) bundle and its constituent concepts.
 package bundle
 
-import "sort"
+import (
+	"sort"
+	"strings"
+)
 
 // Bundle represents a self-contained, hierarchical collection of knowledge documents.
 type Bundle struct {
@@ -77,3 +80,32 @@ func (b *Bundle) ConceptsByType(t string) []*Concept {
 	})
 	return results
 }
+
+// ConceptsByStatus returns all concepts matching a given status ("draft", "stable", "deprecated"), sorted by ID.
+func (b *Bundle) ConceptsByStatus(status string) []*Concept {
+	var results []*Concept
+	for _, c := range b.Concepts {
+		if strings.EqualFold(c.Frontmatter.Status, status) {
+			results = append(results, c)
+		}
+	}
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].ID < results[j].ID
+	})
+	return results
+}
+
+// ConceptsByTrustTier returns all concepts matching a given trust tier ("certified", "human", "automated", "unverified"), sorted by ID.
+func (b *Bundle) ConceptsByTrustTier(tier string) []*Concept {
+	var results []*Concept
+	for _, c := range b.Concepts {
+		if strings.EqualFold(c.TrustTier(), tier) {
+			results = append(results, c)
+		}
+	}
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].ID < results[j].ID
+	})
+	return results
+}
+

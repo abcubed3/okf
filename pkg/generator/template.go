@@ -623,6 +623,67 @@ const HTMLTemplate = `<!DOCTYPE html>
         .citation-card a { color: var(--accent); }
         .citation-host { color: var(--muted); font-family: 'Fira Code', monospace; font-size: 11px; }
 
+        /* ── Trust Signals (OKF v0.2) ───────────────────────────── */
+        .trust-section {
+            margin: 10px 0;
+            padding: 10px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            font-size: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .trust-badges-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .trust-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 7px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: capitalize;
+        }
+
+        .trust-badge.status-stable     { background: rgba(16,185,129,0.15); color: #059669; border: 1px solid rgba(16,185,129,0.3); }
+        .trust-badge.status-draft      { background: rgba(245,158,11,0.15); color: #d97706; border: 1px solid rgba(245,158,11,0.3); }
+        .trust-badge.status-deprecated { background: rgba(239,68,68,0.15); color: #dc2626; border: 1px solid rgba(239,68,68,0.3); }
+
+        .trust-badge.tier-certified   { background: rgba(139,92,246,0.15); color: #7c3aed; border: 1px solid rgba(139,92,246,0.3); }
+        .trust-badge.tier-human       { background: rgba(37,99,235,0.15); color: #2563eb; border: 1px solid rgba(37,99,235,0.3); }
+        .trust-badge.tier-automated   { background: rgba(100,116,139,0.15); color: #475569; border: 1px solid rgba(100,116,139,0.3); }
+        .trust-badge.tier-unverified  { background: rgba(148,163,184,0.1); color: #94a3b8; border: 1px solid rgba(148,163,184,0.2); }
+
+        .trust-badge.freshness-ok     { background: rgba(16,185,129,0.1); color: #10b981; }
+        .trust-badge.freshness-stale  { background: rgba(239,68,68,0.15); color: #ef4444; border: 1px solid rgba(239,68,68,0.3); }
+
+        .attestation-card {
+            background: var(--code-bg);
+            border: 1px dashed var(--accent);
+            border-radius: var(--radius);
+            padding: 8px 10px;
+            font-size: 11px;
+        }
+
+        .attestation-card pre {
+            margin-top: 4px;
+            font-family: 'Fira Code', monospace;
+            white-space: pre-wrap;
+            word-break: break-all;
+            background: transparent;
+            border: none;
+            padding: 0;
+        }
+
         /* ── Scrollbar ──────────────────────────────────────────── */
         ::-webkit-scrollbar { width: 5px; height: 5px; }
         ::-webkit-scrollbar-track { background: transparent; }
@@ -746,6 +807,8 @@ const HTMLTemplate = `<!DOCTYPE html>
                     <dt>Resource</dt>  <dd id="detail-resource"></dd>
                     <dt>Tags</dt>      <dd id="detail-tags"></dd>
                 </dl>
+
+                <div id="detail-trust"></div>
 
                 <hr>
 
@@ -1178,6 +1241,49 @@ async function loadDetail(id) {
         var resp = await fetch('concepts/' + id + '.json');
         if (resp.ok) concept = await resp.json();
     } catch (_) { /* fall back to index entry */ }
+
+    // OKF v0.2 Trust Signals Rendering
+    var trustEl = document.getElementById('detail-trust');
+    var trustHtml = '<div class="trust-section"><div class="trust-badges-row">';
+    var hasTrustInfo = false;
+
+    var statusVal = (concept.status || meta.status || '').toLowerCase();
+    if (statusVal) {
+        hasTrustInfo = true;
+        trustHtml += '<span class="trust-badge status-' + esc(statusVal) + '">● ' + esc(statusVal) + '</span>';
+    }
+
+    var tierVal = (concept.trustTier || meta.trustTier || 'unverified').toLowerCase();
+    hasTrustInfo = true;
+    trustHtml += '<span class="trust-badge tier-' + esc(tierVal) + '">🛡️ ' + esc(tierVal) + '</span>';
+
+    var staleStr = concept.staleAfter || meta.staleAfter;
+    if (staleStr) {
+        hasTrustInfo = true;
+        var isStale = new Date(staleStr) < new Date();
+        var fClass = isStale ? 'freshness-stale' : 'freshness-ok';
+        var fIcon = isStale ? '⚠️ Stale' : '⏳ Fresh';
+        trustHtml += '<span class="trust-badge ' + fClass + '">' + fIcon + ' (stale: ' + esc(staleStr) + ')</span>';
+    }
+    trustHtml += '</div>';
+
+    if (concept.attestation) {
+        hasTrustInfo = true;
+        trustHtml += '<div class="attestation-card"><strong>⚡ Attested Computation</strong>';
+        if (concept.attestation.executor) {
+            trustHtml += ' <span style="color:var(--muted)">(' + esc(concept.attestation.executor) + ')</span>';
+        }
+        if (concept.attestation.query) {
+            trustHtml += '<pre><code>' + esc(concept.attestation.query) + '</code></pre>';
+        }
+        if (concept.attestation.attester) {
+            trustHtml += '<div style="color:var(--muted);font-size:10px;margin-top:4px">Attested by: ' + esc(concept.attestation.attester) + '</div>';
+        }
+        trustHtml += '</div>';
+    }
+
+    trustHtml += '</div>';
+    trustEl.innerHTML = hasTrustInfo ? trustHtml : '';
 
     // Render markdown body
     try {

@@ -226,10 +226,10 @@ func (e *Engine) pullFromConnector(ctx context.Context, c Connector) {
 		return
 	}
 
-	// Commit pull-side hashes only after successful write.
-	for i, concept := range toWrite {
-		if writeHashes[i] != "" {
-			e.state.SetLastPulledHash(concept.ID, writeHashes[i])
+	// Commit pull-side hashes after successful write.
+	for _, concept := range toWrite {
+		if hash, err := HashConcept(concept); err == nil {
+			e.state.SetLastPulledHash(concept.ID, hash)
 		}
 	}
 }

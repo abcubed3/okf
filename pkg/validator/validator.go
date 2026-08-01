@@ -120,8 +120,112 @@ func ValidateConcept(c *bundle.Concept, b *bundle.Bundle, opts Options, rcache r
 	citationIssues := validateCitations(c, b, opts, rcache)
 	issues = append(issues, citationIssues...)
 
+	// 5. OKF v0.2 Trust Signals & Attestation validation
+	trustIssues := validateTrustSignals(c)
+	issues = append(issues, trustIssues...)
+
 	return issues
 }
+
+// validateTrustSignals verifies OKF v0.2 provenance, trust tiers, freshness, lifecycle, and attestation metadata.
+func validateTrustSignals(c *bundle.Concept) []Issue {
+	var issues []Issue
+
+	// 1. Lifecycle status check
+	if c.Frontmatter.Status != "" {
+		st := strings.ToLower(strings.TrimSpace(c.Frontmatter.Status))
+		switch st {
+		case "draft", "stable":
+			// Valid standard statuses
+		case "deprecated":
+			issues = append(issues, Issue{
+				ConceptID: c.ID,
+				Path:      c.Path,
+				Severity:  SeverityWarning,
+				Message:   "concept is marked as deprecated",
+			})
+		default:
+			issues = append(issues, Issue{
+				ConceptID: c.ID,
+				Path:      c.Path,
+				Severity:  SeverityWarning,
+				Message:   fmt.Sprintf("unrecognized lifecycle status '%s' (expected draft, stable, or deprecated)", c.Frontmatter.Status),
+			})
+		}
+	}
+
+	// 2. Freshness (stale_after) check
+	if c.Frontmatter.StaleAfter != "" {
+		staleStr := strings.TrimSpace(c.Frontmatter.StaleAfter)
+		staleTime, err := time.Parse(time.RFC3339, staleStr)
+		if err != nil {
+			staleTime, err = time.Parse("2006-01-02", staleStr)
+		}
+		if err != nil {
+			issues = append(issues, Issue{
+				ConceptID: c.ID,
+				Path:      c.Path,
+				Severity:  SeverityWarning,
+				Message:   fmt.Sprintf("invalid 'stale_after' date format '%s' (expected RFC3339 or YYYY-MM-DD)", staleStr),
+			})
+		} else if time.Now().After(staleTime) {
+			issues = append(issues, Issue{
+				ConceptID: c.ID,
+				Path:      c.Path,
+				Severity:  SeverityWarning,
+				Message:   fmt.Sprintf("concept is stale (stale_after date '%s' has passed)", staleStr),
+			})
+		}
+	}
+
+	// 3. Generated timestamp check
+	if c.Frontmatter.Generated != nil && c.Frontmatter.Generated.At != "" {
+		genAt := strings.TrimSpace(c.Frontmatter.Generated.At)
+		if _, err := time.Parse(time.RFC3339, genAt); err != nil {
+			if _, err := time.Parse("2006-01-02", genAt); err != nil {
+				issues = append(issues, Issue{
+					ConceptID: c.ID,
+					Path:      c.Path,
+					Severity:  SeverityWarning,
+					Message:   fmt.Sprintf("invalid 'generated.at' date format '%s'", genAt),
+				})
+			}
+		}
+	}
+
+	// 4. Verified records check
+	for i, v := range c.Frontmatter.Verified {
+		if v.At != "" {
+			verAt := strings.TrimSpace(v.At)
+			if _, err := time.Parse(time.RFC3339, verAt); err != nil {
+				if _, err := time.Parse("2006-01-02", verAt); err != nil {
+					issues = append(issues, Issue{
+						ConceptID: c.ID,
+						Path:      c.Path,
+						Severity:  SeverityWarning,
+						Message:   fmt.Sprintf("invalid 'verified[%d].at' date format '%s'", i, verAt),
+					})
+				}
+			}
+		}
+	}
+
+	// 5. Attestation concept type check
+	cType := strings.ToLower(strings.TrimSpace(c.Frontmatter.Type))
+	if cType == "attestation" || cType == "attested computation" {
+		if c.Frontmatter.Attestation == nil || (strings.TrimSpace(c.Frontmatter.Attestation.Query) == "" && strings.TrimSpace(c.Frontmatter.Attestation.Executor) == "") {
+			issues = append(issues, Issue{
+				ConceptID: c.ID,
+				Path:      c.Path,
+				Severity:  SeverityError,
+				Message:   "attestation concept requires an 'attestation' frontmatter block with 'query' or 'executor'",
+			})
+		}
+	}
+
+	return issues
+}
+
 
 // validateLinks scans the concept body for broken internal markdown links using a robust Markdown AST parser.
 func validateLinks(c *bundle.Concept, b *bundle.Bundle, opts Options, rcache remoteCache) []Issue {

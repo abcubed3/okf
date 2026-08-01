@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/abcubed3/okf/pkg/bundle"
 	"golang.org/x/sync/errgroup"
@@ -42,6 +43,17 @@ func WriteConcepts(concepts []*bundle.Concept, outputDir string) error {
 			parentDir := filepath.Dir(targetPath)
 			if err := os.MkdirAll(parentDir, 0755); err != nil {
 				return fmt.Errorf("failed to create directory %q: %w", parentDir, err)
+			}
+
+			// Ensure OKF v0.2 Trust Signal defaults for harvested concepts
+			if c.Frontmatter.Generated == nil {
+				c.Frontmatter.Generated = &bundle.ActorInfo{
+					By: "okf-harvester",
+					At: time.Now().Format(time.RFC3339),
+				}
+			}
+			if c.Frontmatter.Status == "" {
+				c.Frontmatter.Status = "stable"
 			}
 
 			// Marshal frontmatter to YAML

@@ -5,6 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/abcubed3/okf/pkg/config"
 	"github.com/abcubed3/okf/pkg/parser"
@@ -70,7 +72,32 @@ func RunLint(args []string) error {
 		fmt.Printf("  %s %s: %s\n", severityPrefix, issue.Path, issue.Message)
 	}
 
+	// Summarize OKF v0.2 Trust Signal metrics
+	verCount := 0
+	staleCount := 0
+	deprecatedCount := 0
+	now := time.Now()
+
+	for _, c := range b.Concepts {
+		if c.IsVerified() {
+			verCount++
+		}
+		if c.IsStale(now) {
+			staleCount++
+		}
+		if strings.EqualFold(c.Frontmatter.Status, "deprecated") {
+			deprecatedCount++
+		}
+	}
+
+	targetVer := b.OKFVersion
+	if targetVer == "" {
+		targetVer = "0.2 (default)"
+	}
+
 	fmt.Println()
+	fmt.Printf("Bundle Summary [OKF v%s]: %d concepts total (%d verified, %d stale, %d deprecated)\n", targetVer, len(b.Concepts), verCount, staleCount, deprecatedCount)
+
 	if errorsCount > 0 || warningsCount > 0 {
 		fmt.Printf("Validation complete: %d errors, %d warnings found.\n", errorsCount, warningsCount)
 	} else {
