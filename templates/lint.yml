@@ -1,0 +1,41 @@
+spec:
+  inputs:
+    stage:
+      default: test
+      description: 'Pipeline stage to execute the OKFgo lint job in.'
+    path:
+      default: '.'
+      description: 'Path to the OKFgo bundle directory or archive to lint.'
+    version:
+      default: 'latest'
+      description: 'OKFgo CLI release version tag to install.'
+    # host:
+    #   default: ''
+    #   description: 'OKF Hub host URL for remote concept resolution.'
+    # api_key:
+    #   default: ''
+    #   description: 'OKF Hub API Key for remote concept resolution.'
+
+---
+
+okf-lint:
+  stage: $[[ inputs.stage ]]
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache curl tar gzip bash ca-certificates
+    - |
+      if [ "$[[ inputs.version ]]" = "latest" ] || [ -z "$[[ inputs.version ]]" ]; then
+        curl -sSfL https://raw.githubusercontent.com/abcubed3/okf/main/install.sh | sh
+      else
+        curl -sSfL https://raw.githubusercontent.com/abcubed3/okf/main/install.sh | sh -s -- "$[[ inputs.version ]]"
+      fi
+      export PATH="$HOME/.local/bin:/usr/local/bin:./bin:$PATH"
+  script:
+    - |
+      export PATH="$HOME/.local/bin:/usr/local/bin:./bin:$PATH"
+      ARGS=""
+      # if [ -n "$[[ inputs.host ]]" ]; then ARGS="$ARGS --host=$[[ inputs.host ]]"; fi
+      # if [ -n "$[[ inputs.api_key ]]" ]; then ARGS="$ARGS --api-key=$[[ inputs.api_key ]]"; fi
+      
+      echo "Executing OKFgo Lint..."
+      okf lint $ARGS "$[[ inputs.path ]]"

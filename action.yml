@@ -1,0 +1,88 @@
+name: 'OKFgo Lint'
+description: 'Lint and validate Open Knowledge Format (OKF) markdown bundles for specification conformance and broken links.'
+author: 'abcubed3'
+branding:
+  icon: 'check-circle'
+  color: 'blue'
+
+inputs:
+  path:
+    description: 'Path to the OKF knowledge bundle directory or archive to lint.'
+    required: false
+    default: '.'
+  version:
+    description: 'Version tag of OKF CLI to install (e.g. v0.2.0 or latest).'
+    required: false
+    default: 'latest'
+  # host:
+  #   description: 'OKF Hub host URL for remote concept resolution.'
+  #   required: false
+  #   default: ''
+  # api-key:
+  #   description: 'OKF Hub API Key for remote concept resolution.'
+  #   required: false
+  #   default: ''
+  working-directory:
+    description: 'Working directory relative to repository root to execute the linter in.'
+    required: false
+    default: '.'
+
+outputs:
+  bundle-path:
+    description: 'Target bundle path that was linted.'
+    value: ${{ steps.lint.outputs.bundle-path }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install OKFgo CLI
+      shell: bash
+      run: |
+        set -e
+        VERSION="${{ inputs.version }}"
+        echo "Installing OKFgo CLI (${VERSION})..."
+        
+        if [ "$VERSION" = "latest" ] || [ -z "$VERSION" ]; then
+          curl -sSfL https://raw.githubusercontent.com/abcubed3/okf/main/install.sh | sh
+        else
+          curl -sSfL https://raw.githubusercontent.com/abcubed3/okf/main/install.sh | sh -s -- "$VERSION"
+        fi
+
+        # Locate installed okfgo binary and export to GITHUB_PATH
+        if [ -x "/usr/local/bin/okf" ]; then
+          echo "/usr/local/bin" >> $GITHUB_PATH
+        elif [ -x "$HOME/.local/bin/okf" ]; then
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+        elif [ -x "./bin/okf" ]; then
+          echo "$(pwd)/bin" >> $GITHUB_PATH
+        fi
+
+    - name: Run OKF Lint
+      id: lint
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        set -e
+        ARGS=""
+        # if [ -n "${{ inputs.host }}" ]; then
+        #   ARGS="$ARGS --host=${{ inputs.host }}"
+        # fi
+        # if [ -n "${{ inputs.api-key }}" ]; then
+        #   ARGS="$ARGS --api-key=${{ inputs.api-key }}"
+        # fi
+
+        TARGET="${{ inputs.path }}"
+        echo "Running: okf lint $ARGS $TARGET"
+        
+        # Ensure okf is in PATH or execute directly
+        if command -v okf >/dev/null 2>&1; then
+          okf lint $ARGS "$TARGET"
+        elif [ -x "$HOME/.local/bin/okf" ]; then
+          $HOME/.local/bin/okf lint $ARGS "$TARGET"
+        elif [ -x "/usr/local/bin/okf" ]; then
+          /usr/local/bin/okf lint $ARGS "$TARGET"
+        else
+          ./bin/okf lint $ARGS "$TARGET"
+        fi
+
+        echo "bundle-path=$TARGET" >> $GITHUB_OUTPUT

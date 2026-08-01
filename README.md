@@ -2,9 +2,9 @@
 
 The **Open Knowledge Format (OKF)** is a vendor-neutral, lightweight specification for structuring organizational knowledge (documentation, runbooks, metrics, database schemas, and API definitions) into machine-readable, human-friendly Markdown files.
 
-By representing knowledge as a directory of Markdown files with structured YAML frontmatter, OKF bridges the gap between structured metadata repositories and unstructured text documentation, serving as an ideal substrate for **AI agents**, **Retrieval-Augmented Generation (RAG)** pipelines, and the **Model Context Protocol (MCP)**.
+By representing knowledge as a directory of Markdown files with structured YAML frontmatter, OKF bridges the gap between structured metadata repositories and unstructured text documentation, serving as an ideal substrate for **AI agents**, **Retrieval-Augmented Generation (RAG)** pipelines, and the **Model Context Protocol (MCP)**. **OKF-go** provides native, full-featured support for **OKF Specification v0.2**, including its Trust Layer and Attested Computation.
 
-## 📄 Knowledge Format Specification
+## 📄 Knowledge Format Specification (OKF Spec v0.2)
 
 ![OKF Concept Document Structure](okf_concept_visual.jpg)
 
@@ -221,7 +221,45 @@ Ensures that the knowledge bundle conforms to the specification. It verifies YAM
   * Presence of recommended fields (`title`, `description`).
   * Resolves and verifies all relative Markdown links (e.g. `[Users](users.md)`) to guarantee the graph is fully connected and lacks orphaned links.
 
+#### CI/CD Automations (GitHub Actions & GitLab CI)
+
+Automate OKF bundle linting on every push or pull request using official marketplace actions:
+
+##### 🐙 GitHub Actions
+
+Add `.github/workflows/okf-lint.yml` to your repository:
+
+```yaml
+name: OKF Lint
+
+on: [push, pull_request]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: abcubed3/okf@v1
+        with:
+          path: '.'
+```
+
+##### 🦊 GitLab CI/CD Component
+
+Include in your `.gitlab-ci.yml`:
+
+```yaml
+include:
+  - component: $CI_SERVER_FQDN/abcubed3/okf/lint@v1.0.0
+    inputs:
+      stage: test
+      path: '.'
+```
+
+*For complete publishing guides, see [Marketplace Publishing Guide](docs/MARKETPLACE_PUBLISHING.md).*
+
 ---
+
 
 ### 2. Schema Harvester (`harvest`)
 
