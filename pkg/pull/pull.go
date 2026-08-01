@@ -3,6 +3,7 @@ package pull
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -56,9 +57,24 @@ func PullBundle(hubURI, host, apiKey string) error {
 		return fmt.Errorf("hub returned error code: %d", resp.StatusCode)
 	}
 
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read hub response: %w", err)
+	}
+
 	var concepts []ConceptResponse
-	if err := json.NewDecoder(resp.Body).Decode(&concepts); err != nil {
-		return fmt.Errorf("failed to parse hub response: %w", err)
+
+	// Try unmarshaling as wrapped response {"concepts": [...], "links": [...]}
+	var wrapper struct {
+		Concepts []ConceptResponse `json:"concepts"`
+	}
+	if err := json.Unmarshal(bodyBytes, &wrapper); err == nil && len(wrapper.Concepts) > 0 {
+		concepts = wrapper.Concepts
+	} else {
+		// Fallback to flat array
+		if err := json.Unmarshal(bodyBytes, &concepts); err != nil {
+			return fmt.Errorf("failed to parse hub response: %w", err)
+		}
 	}
 
 	if len(concepts) == 0 {
