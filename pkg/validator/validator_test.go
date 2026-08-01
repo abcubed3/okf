@@ -105,7 +105,8 @@ Check out this [External Link](https://google.com) which should be ignored.`,
 	}
 
 	for _, issue := range issues {
-		if issue.Severity == SeverityError {
+		switch issue.Severity {
+		case SeverityError:
 			expectedMsg, exists := expectedErrors[issue.ConceptID]
 			if !exists {
 				t.Errorf("unexpected error on concept %q: %s", issue.ConceptID, issue.Message)
@@ -113,7 +114,7 @@ Check out this [External Link](https://google.com) which should be ignored.`,
 				t.Errorf("expected error message %q, got %q", expectedMsg, issue.Message)
 			}
 			delete(expectedErrors, issue.ConceptID)
-		} else if issue.Severity == SeverityWarning {
+		case SeverityWarning:
 			expectedMsg, exists := expectedWarnings[issue.ConceptID]
 			if !exists {
 				t.Errorf("unexpected warning on concept %q: %s", issue.ConceptID, issue.Message)

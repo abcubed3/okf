@@ -117,7 +117,7 @@ func ValidateConcept(c *bundle.Concept, b *bundle.Bundle, opts Options, rcache r
 	issues = append(issues, linkIssues...)
 
 	// 4. Citation validation
-	citationIssues := validateCitations(c, b, opts, rcache)
+	citationIssues := validateCitations(c, b)
 	issues = append(issues, citationIssues...)
 
 	// 5. OKF v0.2 Trust Signals & Attestation validation
@@ -225,7 +225,6 @@ func validateTrustSignals(c *bundle.Concept) []Issue {
 
 	return issues
 }
-
 
 // validateLinks scans the concept body for broken internal markdown links using a robust Markdown AST parser.
 func validateLinks(c *bundle.Concept, b *bundle.Bundle, opts Options, rcache remoteCache) []Issue {
@@ -388,7 +387,7 @@ func extractLinksFromAST(body string) []string {
 }
 
 // validateCitations verifies that any local/internal citation links resolve to existing concepts in the bundle.
-func validateCitations(c *bundle.Concept, b *bundle.Bundle, opts Options, rcache remoteCache) []Issue {
+func validateCitations(c *bundle.Concept, b *bundle.Bundle) []Issue {
 	var issues []Issue
 
 	for _, cite := range c.Citations {

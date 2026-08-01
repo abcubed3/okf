@@ -109,16 +109,17 @@ func TestValidateTrustSignalsV02(t *testing.T) {
 	expectedWarnings := map[string]bool{
 		"deprecated-concept": true,
 		"invalid-status":     true,
-		"stale-concept":       true,
+		"stale-concept":      true,
 	}
 
 	for _, issue := range issues {
-		if issue.Severity == SeverityError {
+		switch issue.Severity {
+		case SeverityError:
 			if !expectedErrors[issue.ConceptID] {
 				t.Errorf("unexpected error on concept %q: %s", issue.ConceptID, issue.Message)
 			}
 			delete(expectedErrors, issue.ConceptID)
-		} else if issue.Severity == SeverityWarning {
+		case SeverityWarning:
 			if !expectedWarnings[issue.ConceptID] {
 				t.Errorf("unexpected warning on concept %q: %s", issue.ConceptID, issue.Message)
 			}
