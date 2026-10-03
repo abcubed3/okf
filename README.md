@@ -218,10 +218,10 @@ Ensures that the knowledge bundle conforms to the specification. It verifies YAM
 
 ```bash
 # Lint the bundle in the current directory
-./okf lint
+okf lint
 
 # Lint a bundle at a specific directory
-./okf lint /path/to/my-bundle
+okf lint /path/to/my-bundle
 ```
 
 - **Hard Rules (Fails with Error):**
@@ -280,26 +280,26 @@ Supports **PostgreSQL**, **MySQL**, **Cloud Spanner**, and **BigQuery**. Connect
 
 ```bash
 # PostgreSQL Example
-./okf harvest db \
+okf harvest db \
   --driver postgres \
   --conn "postgresql://postgres:password@localhost:5432/my_db?sslmode=disable" \
   --schema public \
   --output ./my-bundle/tables
 
 # MySQL Example
-./okf harvest db \
+okf harvest db \
   --driver mysql \
   --conn "user:password@tcp(localhost:3306)/my_db" \
   --output ./my-bundle/tables
 
 # Cloud Spanner Example
-./okf harvest db \
+okf harvest db \
   --driver spanner \
   --conn "projects/my-project/instances/my-instance/databases/my-db" \
   --output ./my-bundle/tables
 
 # BigQuery Example
-./okf harvest db \
+okf harvest db \
   --driver bigquery \
   --conn "projects/my-project" \
   --dataset "my_dataset" \
@@ -332,7 +332,7 @@ okf harvest proto \
 Extracts metadata from a Git repository, turning commits, file structures, and architecture documents into OKF concepts.
 
 ```bash
-./okf harvest git \
+okf harvest git \
   --repo https://github.com/abcubed3/okf.git \
   --output ./my-bundle/git
 ```
@@ -342,7 +342,7 @@ Extracts metadata from a Git repository, turning commits, file structures, and a
 Crawls target URLs to scrape documentation and structure it as OKF concepts. Optionally powered by the **AI Curator** (`--ai-enrich` flag) to automatically generate business descriptions and enrich concepts using Gemini models.
 
 ```bash
-./okf harvest web \
+okf harvest web \
   --url https://example.com/docs \
   --output ./my-bundle/web \
   --ai-enrich
@@ -355,7 +355,7 @@ Crawls target URLs to scrape documentation and structure it as OKF concepts. Opt
 Traverses the concept relationship graph starting from a target concept ID. Follows relative markdown links up to a configured traversal depth to compile a unified context document for LLMs.
 
 ```bash
-./okf assemble tables/orders \
+okf assemble tables/orders \
   --bundle ./testdata/sample \
   --depth 2 \
   --direction bidirectional \
@@ -382,7 +382,7 @@ Exposes the OKF graph as an MCP Server. This allows LLM clients (like Antigravit
 Ideal for local IDE and Desktop applications:
 
 ```bash
-./okf mcp --bundle ./testdata/sample --transport stdio
+okf mcp --bundle ./testdata/sample --transport stdio
 ```
 
 #### HTTP Transport
@@ -390,7 +390,7 @@ Ideal for local IDE and Desktop applications:
 Ideal for remote integrations or network-based MCP clients:
 
 ```bash
-./okf mcp --bundle ./testdata/sample --transport http --port 8080
+okf mcp --bundle ./testdata/sample --transport http --port 8080
 ```
 
 #### Claude Desktop Configuration
@@ -429,10 +429,10 @@ Compiles an OKF knowledge bundle into a fully self-contained static HTML documen
 
 ```bash
 # Compile bundle in current directory to docs/ folder
-./okf doc
+okf doc
 
 # Compile specific bundle to custom directory
-./okf doc --bundle /path/to/my-bundle --output /var/www/okf-portal
+okf doc --bundle /path/to/my-bundle --output /var/www/okf-portal
 ```
 
 - `--bundle`: Path to the OKF bundle (default: `.`).
@@ -446,10 +446,10 @@ Integrates OKF validation directly into your IDE. The LSP daemon runs over stand
 
 ```bash
 # Start Language Server over Stdio
-./okf lsp
+okf lsp
 ```
 
-To use with Cursor or VS Code, configure your LSP client to invoke `./okf lsp` for `markdown` files.
+To use with Cursor or VS Code, configure your LSP client to invoke `okf lsp` for `markdown` files.
 
 ---
 
@@ -459,10 +459,10 @@ Keeps your OKF knowledge bundle in sync with remote document nodes. The sync dae
 
 ```bash
 # Perform a single sync cycle
-./okf sync --config okf.yaml
+okf sync --config okf.yaml
 
 # Run continuously as a daemon
-./okf sync --config okf.yaml --daemon --interval 300
+okf sync --config okf.yaml --daemon --interval 300
 ```
 
 #### Configuration (`okf.yaml`)
@@ -493,6 +493,18 @@ connectors:
 ## 🤝 Contributing
 
 Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) to learn how to set up your development environment, run linters, execute unit tests, and submit pull requests.
+
+---
+
+## Telemetry
+
+When `--remote` is enabled, the CLI sends an anonymous `mcp_start_remote` telemetry event to the OKF Hub. To use the local MCP server without sending this event, explicitly set `--remote=false`:
+
+```bash
+OTEL_SDK_DISABLED=true okf mcp --remote=false
+```
+
+`--remote` defaults to `false`, but setting it explicitly makes the local-only behavior clear. `OTEL_SDK_DISABLED=true` disables OpenTelemetry SDK instrumentation; it does not disable this event, which is sent directly over HTTP. The `--remote=false` setting is what prevents `mcp_start_remote` from being sent.
 
 ---
 

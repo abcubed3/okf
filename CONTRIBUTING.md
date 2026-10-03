@@ -10,7 +10,7 @@ This document outlines the guidelines and workflow for contributing to OKF-go. F
 
 ### System Requirements
 
-* Go `1.26` or higher
+- Go `1.26` or higher
 
 ### Building the CLI Tool
 
@@ -21,7 +21,7 @@ Clone the repository and compile the binary:
 go build -o okf ./cmd/okf
 
 # Verify installation
-./okf help
+okf help
 ```
 
 ---
@@ -30,10 +30,10 @@ go build -o okf ./cmd/okf
 
 ### Prerequisites
 
-* **Go**: Version `1.26` or higher.
-* **Task**: The [Taskfile](https://taskfile.dev) runner is used to manage development workflows.
-  * On macOS: `brew install go-task`
-  * On Linux: `sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d`
+- **Go**: Version `1.26` or higher.
+- **Task**: The [Taskfile](https://taskfile.dev) runner is used to manage development workflows.
+  - On macOS: `brew install go-task`
+  - On Linux: `sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d`
 
 ### Local Setup
 
@@ -57,11 +57,11 @@ go build -o okf ./cmd/okf
 
 The project utilizes [Task](https://taskfile.dev) for local development and build orchestration. If you have `task` installed, you can use the following commands:
 
-* **Build locally:** `task build` (compiles and outputs `./okf` with build metadata)
-* **Run unit tests:** `task test`
-* **Run lint checks:** `task lint`
-* **Local cross-compilation:** `task cross-compile` (outputs multi-platform binaries to `dist/bin/`)
-* **Clean build directory:** `task clean`
+- **Build locally:** `task build` (compiles and outputs `./okf` with build metadata)
+- **Run unit tests:** `task test`
+- **Run lint checks:** `task lint`
+- **Local cross-compilation:** `task cross-compile` (outputs multi-platform binaries to `dist/bin/`)
+- **Clean build directory:** `task clean`
 
 If you don't have `task` installed, you can build manually via:
 
@@ -79,7 +79,7 @@ Before committing any changes, run the linter and formatter to check for stylist
 task lint
 ```
 
-*Note: This runs `go vet` and checks that the code conforms to standard Go formatting rules.*
+_Note: This runs `go vet` and checks that the code conforms to standard Go formatting rules._
 
 ### Local Compilation
 
@@ -165,6 +165,6 @@ For a full guide on interpreting results, detecting regressions with `benchstat`
 
 ## 📝 Code Guidelines
 
-* **Idiomatic Go**: Follow standard Go design patterns and idioms (see [Go Code Review Comments](https://github.com/golang/go/wiki/CodeReviewComments)).
-* **Documentation**: Write clear comments for exported structs, interfaces, and functions.
-* **Testing**: Every new feature or bug fix should be accompanied by relevant unit tests. Keep test coverage high.
+- **Idiomatic Go**: Follow standard Go design patterns and idioms (see [Go Code Review Comments](https://github.com/golang/go/wiki/CodeReviewComments)).
+- **Documentation**: Write clear comments for exported structs, interfaces, and functions.
+- **Testing**: Every new feature or bug fix should be accompanied by relevant unit tests. Keep test coverage high.
