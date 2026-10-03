@@ -1,16 +1,16 @@
 package cli
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
-	"path/filepath"
-	"bytes"
-	"encoding/json"
 	"io"
 	"net/http"
-	"time"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/abcubed3/okf/pkg/config"
 	"github.com/abcubed3/okf/pkg/parser"

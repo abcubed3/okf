@@ -6,7 +6,6 @@ import (
 	"time"
 )
 
-
 // Source represents provenance information for an OKF v0.2 concept document.
 type Source struct {
 	// URI is the target web link or file path of the source document.
@@ -143,4 +142,3 @@ func (c *Concept) TrustTier() string {
 	}
 	return tier
 }
-
