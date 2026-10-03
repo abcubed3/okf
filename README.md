@@ -103,18 +103,18 @@ This concept defines the sanctioned computation logic for financial reporting.
 
 ---
 
-* **OKF v0.2 Trust Signals & Attestation:** Native support for the v0.2 Trust Layer, including Provenance (`sources`), Trust Verification (`generated`/`verified`), Freshness Expiration (`stale_after`), Lifecycle Status (`status`), and Attested Computation (`type: Attestation`).
-* **Conformance Engine & Linter (`okf lint`):** Validates knowledge bundles for YAML frontmatter correctness, required attributes, broken internal links, and OKF v0.2 trust signal compliance.
-* **Metadata Harvesters (`okf harvest`):** Automatically extracts and converts schemas from databases (PostgreSQL, MySQL, Cloud Spanner, BigQuery), OpenAPI specs, Protobuf files, Git repositories, and web pages into OKF concept documents.
-* **Context Assembler (`okf assemble`):** Performs graph-based Breadth-First Search (BFS) starting from a core concept, resolving related concepts within a specified character/token budget to build pruned, high-quality prompt context.
-* **Model Context Protocol Server (`okf mcp`):** Exposes your knowledge base directly to MCP-compatible AI clients (e.g. Claude Desktop, Cursor, Antigravity) via Stdio or SSE transport.
-* **Bundle Operations (`okf diff` / `okf merge`):** Compare two OKF bundles for structural and content differences, or merge them to unify distributed knowledge bases.
-* **AI Curator (`--ai-enrich` flag):** AI-powered concept curation during metadata harvesting to automatically generate business descriptions and categorize concepts using Gemini models.
-* **JSON-LD Export (`okf export`):** Export your OKF graph into JSON-LD format for the semantic web.
-* **Interactive HTML Portal Compiler (`okf doc`):** Compiles an OKF bundle into an interactive static web application with search, tagging, and link relationship graphs.
-* **Language Server Protocol Daemon (`okf lsp`) & VS Code Extension:** Runs an LSP server over Standard I/O to publish diagnostic errors/warnings in real-time inside IDEs. A dedicated VS Code Extension is also available.
-* **Bi-directional Sync Daemon (`okf sync`):** Automatically synchronizes local concepts with remote document nodes in Notion, Confluence, Jira, and Google Drive.
-* **Blazing Fast Performance:** Highly optimized Go architecture parsing ~97k concepts/sec, completing full 200-node graph BFS traversals in <40µs, and validating 100-concept bundles in ~125µs.
+- **OKF v0.2 Trust Signals & Attestation:** Native support for the v0.2 Trust Layer, including Provenance (`sources`), Trust Verification (`generated`/`verified`), Freshness Expiration (`stale_after`), Lifecycle Status (`status`), and Attested Computation (`type: Attestation`).
+- **Conformance Engine & Linter (`okf lint`):** Validates knowledge bundles for YAML frontmatter correctness, required attributes, broken internal links, and OKF v0.2 trust signal compliance.
+- **Metadata Harvesters (`okf harvest`):** Automatically extracts and converts schemas from databases (PostgreSQL, MySQL, Cloud Spanner, BigQuery), OpenAPI specs, Protobuf files, Git repositories, and web pages into OKF concept documents.
+- **Context Assembler (`okf assemble`):** Performs graph-based Breadth-First Search (BFS) starting from a core concept, resolving related concepts within a specified character/token budget to build pruned, high-quality prompt context.
+- **Model Context Protocol Server (`okf mcp`):** Exposes your knowledge base directly to MCP-compatible AI clients (e.g. Claude Desktop, Cursor, Antigravity) via Stdio or HTTP transport.
+- **Bundle Operations (`okf diff` / `okf merge`):** Compare two OKF bundles for structural and content differences, or merge them to unify distributed knowledge bases.
+- **AI Curator (`--ai-enrich` flag):** AI-powered concept curation during metadata harvesting to automatically generate business descriptions and categorize concepts using Gemini models.
+- **JSON-LD Export (`okf export`):** Export your OKF graph into JSON-LD format for the semantic web.
+- **Interactive HTML Portal Compiler (`okf doc`):** Compiles an OKF bundle into an interactive static web application with search, tagging, and link relationship graphs.
+- **Language Server Protocol Daemon (`okf lsp`) & VS Code Extension:** Runs an LSP server over Standard I/O to publish diagnostic errors/warnings in real-time inside IDEs. A dedicated VS Code Extension is also available.
+- **Bi-directional Sync Daemon (`okf sync`):** Automatically synchronizes local concepts with remote document nodes in Notion, Confluence, Jira, and Google Drive.
+- **Blazing Fast Performance:** Highly optimized Go architecture parsing ~97k concepts/sec, completing full 200-node graph BFS traversals in <40µs, and validating 100-concept bundles in ~125µs.
 
 ---
 
@@ -134,17 +134,17 @@ Run the automated installer script to download, verify, and install the correct 
 curl -sSfL https://okfgo.dev/install.sh | sh
 ```
 
-*By default, this installs to `/usr/local/bin` (if writeable), `~/.local/bin`, or `./bin` (fallback).*
+_By default, this installs to `/usr/local/bin` (if writeable), `~/.local/bin`, or `./bin` (fallback)._
 
 #### Option B: GitHub Releases (Manual Download)
 
 Go to the [Releases](https://github.com/abcubed3/okf/releases) page on GitHub and download the appropriate archive for your operating system:
 
-* **macOS (Apple Silicon / M-series):** `okf_<version>_darwin_arm64.tar.gz`
-* **macOS (Intel):** `okf_<version>_darwin_amd64.tar.gz`
-* **Linux (64-bit AMD64):** `okf_<version>_linux_amd64.tar.gz`
-* **Linux (ARM64 / Graviton):** `okf_<version>_linux_arm64.tar.gz`
-* **Windows (64-bit):** `okf_<version>_windows_amd64.zip`
+- **macOS (Apple Silicon / M-series):** `okf_<version>_darwin_arm64.tar.gz`
+- **macOS (Intel):** `okf_<version>_darwin_amd64.tar.gz`
+- **Linux (64-bit AMD64):** `okf_<version>_linux_amd64.tar.gz`
+- **Linux (ARM64 / Graviton):** `okf_<version>_linux_arm64.tar.gz`
+- **Windows (64-bit):** `okf_<version>_windows_amd64.zip`
 
 Extract the binary and add it to your system's `PATH`.
 
@@ -224,12 +224,12 @@ Ensures that the knowledge bundle conforms to the specification. It verifies YAM
 ./okf lint /path/to/my-bundle
 ```
 
-* **Hard Rules (Fails with Error):**
-  * Syntactically valid YAML frontmatter.
-  * Presence of the `type` field in frontmatter.
-* **Soft Rules (Emits Warning):**
-  * Presence of recommended fields (`title`, `description`).
-  * Resolves and verifies all relative Markdown links (e.g. `[Users](users.md)`) to guarantee the graph is fully connected and lacks orphaned links.
+- **Hard Rules (Fails with Error):**
+  - Syntactically valid YAML frontmatter.
+  - Presence of the `type` field in frontmatter.
+- **Soft Rules (Emits Warning):**
+  - Presence of recommended fields (`title`, `description`).
+  - Resolves and verifies all relative Markdown links (e.g. `[Users](users.md)`) to guarantee the graph is fully connected and lacks orphaned links.
 
 #### CI/CD Automations (GitHub Actions & GitLab CI)
 
@@ -251,7 +251,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: abcubed3/okf@v1
         with:
-          path: '.'
+          path: "."
 ```
 
 ##### 🦊 GitLab CI/CD Component
@@ -263,13 +263,12 @@ include:
   - component: $CI_SERVER_FQDN/abcubed3/okf/lint@v1.0.0
     inputs:
       stage: test
-      path: '.'
+      path: "."
 ```
 
-*For complete publishing guides, see [Marketplace Publishing Guide](docs/MARKETPLACE_PUBLISHING.md).*
+_For complete publishing guides, see [Marketplace Publishing Guide](docs/MARKETPLACE_PUBLISHING.md)._
 
 ---
-
 
 ### 2. Schema Harvester (`harvest`)
 
@@ -313,9 +312,9 @@ Parses OpenAPI spec documents (JSON/YAML) and generates OKF concepts representin
 
 ```bash
 # Harvest an OpenAPI spec and output to a bundle
-okf harvest openapi 
-  --spec ../openapi-sample.yaml 
-  --output harvested-endpoints 
+okf harvest openapi
+  --spec ../openapi-sample.yaml
+  --output harvested-endpoints
 ```
 
 #### C. Protobuf Schema Harvesting (`harvest proto`)
@@ -366,11 +365,11 @@ Traverses the concept relationship graph starting from a target concept ID. Foll
 
 #### CLI Flags
 
-* `--bundle`: Path to the OKF bundle (default: `.` or current directory).
-* `--depth`: Maximum depth of link traversal (default: `2`).
-* `--direction`: Traverse `outbound`, `inbound`, or `bidirectional` links (default: `bidirectional`).
-* `--format`: Output format, either `xml` or `markdown` (default: `xml`).
-* `--max-chars`: Maximum character budget for the output. If exceeded, traversal stops to prevent context overflow (default: `16000`).
+- `--bundle`: Path to the OKF bundle (default: `.` or current directory).
+- `--depth`: Maximum depth of link traversal (default: `2`).
+- `--direction`: Traverse `outbound`, `inbound`, or `bidirectional` links (default: `bidirectional`).
+- `--format`: Output format, either `xml` or `markdown` (default: `xml`).
+- `--max-chars`: Maximum character budget for the output. If exceeded, traversal stops to prevent context overflow (default: `16000`).
 
 ---
 
@@ -386,12 +385,12 @@ Ideal for local IDE and Desktop applications:
 ./okf mcp --bundle ./testdata/sample --transport stdio
 ```
 
-#### SSE Transport (HTTP Server-Sent Events)
+#### HTTP Transport
 
 Ideal for remote integrations or network-based MCP clients:
 
 ```bash
-./okf mcp --bundle ./testdata/sample --transport sse --port 8080
+./okf mcp --bundle ./testdata/sample --transport http --port 8080
 ```
 
 #### Claude Desktop Configuration
@@ -403,11 +402,7 @@ To register the OKF-go MCP server with Claude Desktop, add the server to your `c
   "mcpServers": {
     "okf-knowledge": {
       "command": "/Users/abcubed3/okf-go/okf",
-      "args": [
-        "mcp",
-        "--bundle",
-        "/Users/abcubed3/okf-go/testdata/sample"
-      ]
+      "args": ["mcp", "--bundle", "/Users/abcubed3/okf-go/testdata/sample"]
     }
   }
 }
@@ -415,16 +410,16 @@ To register the OKF-go MCP server with Claude Desktop, add the server to your `c
 
 #### Exposed MCP Capabilities
 
-* **Resources:**
-  * `okf://index`: A text/markdown list of all concepts in the bundle.
-  * `okf://concept/{id}`: Resolves the complete document for a concept by its ID.
-* **Prompts:**
-  * `okf_concept_context`: Automatically generates an analysis prompt for a concept along with its assembled subgraph.
-* **Tools:**
-  * `list_concepts`: Returns summaries of all concepts.
-  * `search_concepts`: Search matching terms in concept IDs, titles, descriptions, and tags.
-  * `get_concept`: Fetch raw contents of a concept.
-  * `assemble_context`: Run depth-traversal context assembly dynamically from the LLM.
+- **Resources:**
+  - `okf://index`: A text/markdown list of all concepts in the bundle.
+  - `okf://concept/{id}`: Resolves the complete document for a concept by its ID.
+- **Prompts:**
+  - `okf_concept_context`: Automatically generates an analysis prompt for a concept along with its assembled subgraph.
+- **Tools:**
+  - `list_concepts`: Returns summaries of all concepts.
+  - `search_concepts`: Search matching terms in concept IDs, titles, descriptions, and tags.
+  - `get_concept`: Fetch raw contents of a concept.
+  - `assemble_context`: Run depth-traversal context assembly dynamically from the LLM.
 
 ---
 
@@ -440,8 +435,8 @@ Compiles an OKF knowledge bundle into a fully self-contained static HTML documen
 ./okf doc --bundle /path/to/my-bundle --output /var/www/okf-portal
 ```
 
-* `--bundle`: Path to the OKF bundle (default: `.`).
-* `--output`: Output path for the static website files (default: `docs`).
+- `--bundle`: Path to the OKF bundle (default: `.`).
+- `--output`: Output path for the static website files (default: `docs`).
 
 ---
 
@@ -503,7 +498,7 @@ Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md)
 
 ## 👥 Authors
 
-* **abcubed3** — *Creator & Maintainer* — [GitHub Profile](https://github.com/abcubed3)
+- **abcubed3** — _Creator & Maintainer_ — [GitHub Profile](https://github.com/abcubed3)
 
 ---
 

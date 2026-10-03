@@ -25,7 +25,7 @@ type Server struct {
 	bundlePath string
 	// sdkServer is the underlying Model Context Protocol SDK server instance.
 	sdkServer *sdk.Server
-	// Token is an optional authentication token for SSE transport.
+	// Token is an optional authentication token for HTTP transport.
 	Token string
 
 	mu sync.RWMutex
@@ -214,8 +214,8 @@ func (s *Server) StartStdio(ctx context.Context) error {
 	return s.sdkServer.Run(ctx, transport)
 }
 
-// StartSSE starts the server using HTTP Server-Sent Events (SSE) transport.
-func (s *Server) StartSSE(addr string) error {
+// StartHTTP starts the server using HTTP transport (HTTP/streaming endpoint).
+func (s *Server) StartHTTP(addr string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -227,7 +227,7 @@ func (s *Server) StartSSE(addr string) error {
 		return s.sdkServer
 	}, nil)
 
-	// Secure SSE Handler with CORS boundaries and Bearer Token authentication
+	// Secure HTTP Handler with CORS boundaries and Bearer Token authentication
 	secureHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// 1. CORS check
 		origin := r.Header.Get("Origin")
@@ -595,15 +595,15 @@ func (s *Server) handleAssembleContext(ctx context.Context, req *sdk.CallToolReq
 	}
 
 	return &sdk.CallToolResult{
-		Content: []sdk.Content{
-			&sdk.TextContent{
-				Text: res.Context,
+			Content: []sdk.Content{
+				&sdk.TextContent{
+					Text: res.Context,
+				},
 			},
-		},
-	}, AssembleContextResult{
-		Context:         res.Context,
-		TotalTokens:     res.TotalTokens,
-		TotalCharacters: res.TotalCharacters,
-		Nodes:           res.Nodes,
-	}, nil
+		}, AssembleContextResult{
+			Context:         res.Context,
+			TotalTokens:     res.TotalTokens,
+			TotalCharacters: res.TotalCharacters,
+			Nodes:           res.Nodes,
+		}, nil
 }

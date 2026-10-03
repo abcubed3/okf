@@ -14,8 +14,8 @@ import (
 
 func main() {
 	bundlePath := flag.String("bundle", ".", "Path to the OKF knowledge bundle directory")
-	transport := flag.String("transport", "stdio", "Transport mode: 'stdio' or 'sse'")
-	port := flag.Int("port", 8080, "Port for SSE transport server")
+	transport := flag.String("transport", "stdio", "Transport mode: 'stdio' or 'http'")
+	port := flag.Int("port", 8080, "Port for HTTP transport server")
 	flag.Parse()
 
 	localPath, cleanup, err := parser.ResolvePath(*bundlePath)
@@ -39,10 +39,10 @@ func main() {
 
 	ctx := context.Background()
 
-	if *transport == "sse" {
+	if *transport == "http" {
 		addr := fmt.Sprintf(":%d", *port)
-		fmt.Fprintf(os.Stderr, "Starting OKF MCP Server over SSE at http://localhost%s...\n", addr)
-		if err := srv.StartSSE(addr); err != nil {
+		fmt.Fprintf(os.Stderr, "Starting OKF MCP Server over HTTP at http://localhost%s...\n", addr)
+		if err := srv.StartHTTP(addr); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: server failed: %v\n", err)
 			os.Exit(1)
 		}
