@@ -24,6 +24,8 @@ func TestValidateFrontmatterPaths(t *testing.T) {
 	for _, relPath := range []string{
 		"references/resource.md",
 		"references/source.md",
+		"references/source.custom",
+		"metrics/resource.custom",
 		"metrics/query.sql",
 		"references/runner.md",
 		"references/attester.py",
@@ -38,9 +40,10 @@ func TestValidateFrontmatterPaths(t *testing.T) {
 			Type:     "Attested Computation",
 			Title:    "Revenue",
 			Desc:     "Calculate revenue.",
-			Resource: "/references/resource.md",
+			Resource: "resource.custom",
 			Sources: []bundle.Source{
 				{Resource: "../references/source.md"},
+				{Resource: "../references/source.custom"},
 				{Resource: "https://example.com/source"},
 				{Resource: "all queries in BigQuery project X"},
 			},
@@ -159,7 +162,7 @@ func TestValidateFrontmatterPathsSkipsOpaqueResourceValues(t *testing.T) {
 		ID:   "metric",
 		Path: "metric.md",
 		Frontmatter: bundle.Frontmatter{
-			Resource: "analytics.mrr_daily",
+			Resource: "analytics_mrr_daily",
 			Sources: []bundle.Source{
 				{Resource: "all queries in BigQuery project X"},
 				{Resource: "https://example.com/source"},
@@ -171,6 +174,31 @@ func TestValidateFrontmatterPathsSkipsOpaqueResourceValues(t *testing.T) {
 
 	if issues := validateFrontmatterPaths(concept, b); len(issues) != 0 {
 		t.Fatalf("expected opaque values and URLs to be skipped, got: %+v", issues)
+	}
+}
+
+func TestValidateFrontmatterPathsResolvesDottedIdentifierAsFile(t *testing.T) {
+	root := t.TempDir()
+	targetPath := filepath.Join(root, "metrics", "analytics.mrr_daily")
+	if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
+		t.Fatalf("create concept directory: %v", err)
+	}
+	if err := os.WriteFile(targetPath, []byte("fixture"), 0o644); err != nil {
+		t.Fatalf("write dotted-identifier file: %v", err)
+	}
+
+	concept := &bundle.Concept{
+		ID:   "metrics/revenue",
+		Path: "metrics/revenue.md",
+		Frontmatter: bundle.Frontmatter{
+			Resource: "analytics.mrr_daily",
+		},
+	}
+	b := bundle.NewBundle(root)
+	b.Concepts[concept.ID] = concept
+
+	if issues := validateFrontmatterPaths(concept, b); len(issues) != 0 {
+		t.Fatalf("expected dotted identifier to resolve as a file beside the concept, got: %+v", issues)
 	}
 }
 
