@@ -50,6 +50,27 @@ type Attestation struct {
 	Attester string `yaml:"attester,omitempty" json:"attester,omitempty"`
 }
 
+// Executor describes how an attested computation is run.
+type Executor struct {
+	// Resource identifies run instructions or code.
+	Resource string `yaml:"resource,omitempty" json:"resource,omitempty"`
+	// Receipt lists the evidence returned by a run.
+	Receipt []string `yaml:"receipt,omitempty" json:"receipt,omitempty"`
+}
+
+// Attester describes the deterministic check for an attested computation.
+type Attester struct {
+	// Resource identifies the code that checks an execution receipt.
+	Resource string `yaml:"resource,omitempty" json:"resource,omitempty"`
+}
+
+// Parameter describes a typed input accepted by a computation.
+type Parameter struct {
+	Name     string `yaml:"name" json:"name"`
+	Type     string `yaml:"type" json:"type"`
+	Required bool   `yaml:"required" json:"required"`
+}
+
 // Frontmatter represents the metadata block of an OKF concept document.
 type Frontmatter struct {
 	// Type specifies the category of the concept (e.g., "PostgreSQL Table", "API Endpoint", "Attestation").
@@ -71,6 +92,16 @@ type Frontmatter struct {
 
 	// Sources records the provenance and origin materials for this concept.
 	Sources []Source `yaml:"sources,omitempty"`
+	// Runtime identifies the environment used to run an attested computation.
+	Runtime string `yaml:"runtime,omitempty"`
+	// Parameters lists the typed inputs accepted by an attested computation.
+	Parameters []Parameter `yaml:"parameters,omitempty"`
+	// Computation is an optional path to the computation file.
+	Computation string `yaml:"computation,omitempty"`
+	// Executor describes how an attested computation is run.
+	Executor *Executor `yaml:"executor,omitempty"`
+	// Attester describes the deterministic check for an attested computation.
+	Attester *Attester `yaml:"attester,omitempty"`
 	// Generated records creation metadata (actor and timestamp).
 	Generated *ActorInfo `yaml:"generated,omitempty"`
 	// Verified lists independent confirmations of accuracy (human or automated).

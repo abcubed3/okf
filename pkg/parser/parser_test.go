@@ -109,6 +109,51 @@ Body`
 	}
 }
 
+func TestParseConceptReaderComputationPathFields(t *testing.T) {
+	input := `---
+type: Attested Computation
+runtime: bigquery
+computation: references/query.sql
+executor:
+  resource: references/run.md
+  receipt: [job_id, executed_sql]
+attester:
+  resource: references/attest.py
+parameters:
+  - name: year
+    type: integer
+    required: true
+---
+Body`
+
+	concept, err := ParseConceptReader(strings.NewReader(input), "computations/revenue.md", "computations/revenue")
+	if err != nil {
+		t.Fatalf("ParseConceptReader returned error: %v", err)
+	}
+	frontmatter := concept.Frontmatter
+	if frontmatter.Computation != "references/query.sql" {
+		t.Errorf("expected computation path %q, got %q", "references/query.sql", frontmatter.Computation)
+	}
+	if frontmatter.Executor == nil {
+		t.Fatal("expected executor frontmatter")
+	}
+	if frontmatter.Executor.Resource != "references/run.md" {
+		t.Errorf("expected executor resource %q, got %#v", "references/run.md", frontmatter.Executor)
+	}
+	if frontmatter.Attester == nil {
+		t.Fatal("expected attester frontmatter")
+	}
+	if frontmatter.Attester.Resource != "references/attest.py" {
+		t.Errorf("expected attester resource %q, got %#v", "references/attest.py", frontmatter.Attester)
+	}
+	if len(frontmatter.Executor.Receipt) != 2 || frontmatter.Executor.Receipt[0] != "job_id" {
+		t.Errorf("expected executor receipt fields to be parsed, got %#v", frontmatter.Executor.Receipt)
+	}
+	if len(frontmatter.Parameters) != 1 || frontmatter.Parameters[0].Name != "year" || !frontmatter.Parameters[0].Required {
+		t.Errorf("expected computation parameters to be parsed, got %#v", frontmatter.Parameters)
+	}
+}
+
 func TestDefaultParseOptions(t *testing.T) {
 	opts := DefaultParseOptions()
 	expectedMaxSize := int64(10 * 1024 * 1024)

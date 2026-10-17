@@ -112,6 +112,8 @@ func ValidateConcept(c *bundle.Concept, b *bundle.Bundle, opts Options, rcache r
 		})
 	}
 
+	issues = append(issues, validateFrontmatterPaths(c, b)...)
+
 	// 3. Link validation
 	linkIssues := validateLinks(c, b, opts, rcache)
 	issues = append(issues, linkIssues...)
@@ -212,8 +214,10 @@ func validateTrustSignals(c *bundle.Concept) []Issue {
 
 	// 5. Attestation concept type check
 	cType := strings.ToLower(strings.TrimSpace(c.Frontmatter.Type))
-	if cType == "attestation" || cType == "attested computation" {
-		if c.Frontmatter.Attestation == nil || (strings.TrimSpace(c.Frontmatter.Attestation.Query) == "" && strings.TrimSpace(c.Frontmatter.Attestation.Executor) == "") {
+	hasLegacyAttestation := c.Frontmatter.Attestation != nil &&
+		(strings.TrimSpace(c.Frontmatter.Attestation.Query) != "" || strings.TrimSpace(c.Frontmatter.Attestation.Executor) != "")
+	if cType == "attestation" {
+		if !hasLegacyAttestation {
 			issues = append(issues, Issue{
 				ConceptID: c.ID,
 				Path:      c.Path,
@@ -221,6 +225,13 @@ func validateTrustSignals(c *bundle.Concept) []Issue {
 				Message:   "attestation concept requires an 'attestation' frontmatter block with 'query' or 'executor'",
 			})
 		}
+	} else if cType == "attested computation" && strings.TrimSpace(c.Frontmatter.Runtime) == "" && !hasLegacyAttestation {
+		issues = append(issues, Issue{
+			ConceptID: c.ID,
+			Path:      c.Path,
+			Severity:  SeverityError,
+			Message:   "attested computation concept requires a 'runtime' frontmatter field",
+		})
 	}
 
 	return issues
