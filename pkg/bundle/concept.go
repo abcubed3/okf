@@ -6,6 +6,15 @@ import (
 	"time"
 )
 
+// ConceptLifecycleStatus represents a concept's lifecycle state.
+type ConceptLifecycleStatus string
+
+const (
+	// ConceptLifecycleStable is the default lifecycle status for OKF v0.2 concepts.
+	ConceptLifecycleStable     ConceptLifecycleStatus = "stable"
+	ConceptLifecycleDraft      ConceptLifecycleStatus = "draft"
+	ConceptLifecycleDeprecated ConceptLifecycleStatus = "deprecated"
+)
 
 // Source represents provenance information for an OKF v0.2 concept document.
 type Source struct {
@@ -69,7 +78,7 @@ type Frontmatter struct {
 	// StaleAfter defines an absolute RFC3339 expiration date after which re-verification is required.
 	StaleAfter string `yaml:"stale_after,omitempty"`
 	// Status specifies the lifecycle state ("draft", "stable", "deprecated").
-	Status string `yaml:"status,omitempty"`
+	Status ConceptLifecycleStatus `yaml:"status,omitempty"`
 	// Attestation defines sanctioned computation properties for Attestation concepts.
 	Attestation *Attestation `yaml:"attestation,omitempty"`
 

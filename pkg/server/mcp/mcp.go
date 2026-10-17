@@ -595,15 +595,15 @@ func (s *Server) handleAssembleContext(ctx context.Context, req *sdk.CallToolReq
 	}
 
 	return &sdk.CallToolResult{
-		Content: []sdk.Content{
-			&sdk.TextContent{
-				Text: res.Context,
+			Content: []sdk.Content{
+				&sdk.TextContent{
+					Text: res.Context,
+				},
 			},
-		},
-	}, AssembleContextResult{
-		Context:         res.Context,
-		TotalTokens:     res.TotalTokens,
-		TotalCharacters: res.TotalCharacters,
-		Nodes:           res.Nodes,
-	}, nil
+		}, AssembleContextResult{
+			Context:         res.Context,
+			TotalTokens:     res.TotalTokens,
+			TotalCharacters: res.TotalCharacters,
+			Nodes:           res.Nodes,
+		}, nil
 }

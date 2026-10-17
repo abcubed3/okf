@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/abcubed3/okf/pkg/bundle"
 	"github.com/abcubed3/okf/pkg/config"
 	"github.com/abcubed3/okf/pkg/parser"
 	"github.com/abcubed3/okf/pkg/validator"
@@ -85,7 +86,7 @@ func RunLint(args []string) error {
 		if c.IsStale(now) {
 			staleCount++
 		}
-		if strings.EqualFold(c.Frontmatter.Status, "deprecated") {
+		if strings.EqualFold(string(c.Frontmatter.Status), string(bundle.ConceptLifecycleDeprecated)) {
 			deprecatedCount++
 		}
 	}

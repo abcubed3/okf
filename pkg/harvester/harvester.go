@@ -53,7 +53,7 @@ func WriteConcepts(concepts []*bundle.Concept, outputDir string) error {
 				}
 			}
 			if c.Frontmatter.Status == "" {
-				c.Frontmatter.Status = "stable"
+				c.Frontmatter.Status = bundle.ConceptLifecycleStable
 			}
 
 			// Marshal frontmatter to YAML

@@ -133,11 +133,11 @@ func validateTrustSignals(c *bundle.Concept) []Issue {
 
 	// 1. Lifecycle status check
 	if c.Frontmatter.Status != "" {
-		st := strings.ToLower(strings.TrimSpace(c.Frontmatter.Status))
+		st := bundle.ConceptLifecycleStatus(strings.ToLower(strings.TrimSpace(string(c.Frontmatter.Status))))
 		switch st {
-		case "draft", "stable":
+		case bundle.ConceptLifecycleDraft, bundle.ConceptLifecycleStable:
 			// Valid standard statuses
-		case "deprecated":
+		case bundle.ConceptLifecycleDeprecated:
 			issues = append(issues, Issue{
 				ConceptID: c.ID,
 				Path:      c.Path,
@@ -149,7 +149,7 @@ func validateTrustSignals(c *bundle.Concept) []Issue {
 				ConceptID: c.ID,
 				Path:      c.Path,
 				Severity:  SeverityWarning,
-				Message:   fmt.Sprintf("unrecognized lifecycle status '%s' (expected draft, stable, or deprecated)", c.Frontmatter.Status),
+				Message:   fmt.Sprintf("unrecognized lifecycle status '%s' (expected %s, %s, or %s)", c.Frontmatter.Status, bundle.ConceptLifecycleDraft, bundle.ConceptLifecycleStable, bundle.ConceptLifecycleDeprecated),
 			})
 		}
 	}
