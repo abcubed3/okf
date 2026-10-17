@@ -18,6 +18,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const DefaultMaxFileSize = 10 * 1024 * 1024 // 10MB
+
 // ParseOptions configures the parser settings.
 type ParseOptions struct {
 	// MaxFileSize is the maximum allowed file size in bytes. Defaults to 10MB.
@@ -27,7 +29,7 @@ type ParseOptions struct {
 // DefaultParseOptions returns sensible parsing defaults.
 func DefaultParseOptions() ParseOptions {
 	return ParseOptions{
-		MaxFileSize: 10 * 1024 * 1024, // 10MB
+		MaxFileSize: DefaultMaxFileSize, // 10MB
 	}
 }
 
@@ -41,7 +43,7 @@ func ParseBundle(ctx context.Context, rootPath string) (*bundle.Bundle, error) {
 // It parallelizes concept file parsing for scalability and restricts large files.
 func ParseBundleWithOptions(ctx context.Context, rootPath string, opts ParseOptions) (*bundle.Bundle, error) {
 	if opts.MaxFileSize <= 0 {
-		opts.MaxFileSize = 10 * 1024 * 1024 // Fallback/default to 10MB
+		opts.MaxFileSize = DefaultMaxFileSize // Fallback using default
 	}
 
 	absRoot, err := filepath.Abs(rootPath)

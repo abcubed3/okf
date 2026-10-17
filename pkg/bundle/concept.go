@@ -9,8 +9,8 @@ import (
 
 // Source represents provenance information for an OKF v0.2 concept document.
 type Source struct {
-	// URI is the target web link or file path of the source document.
-	URI string `yaml:"uri,omitempty" json:"uri,omitempty"`
+	// Resource is the URI or bundle-relative path of the source material.
+	Resource string `yaml:"resource,omitempty" json:"resource,omitempty"`
 	// Title is the human-readable description of the source material.
 	Title string `yaml:"title,omitempty" json:"title,omitempty"`
 	// Author is the creator of the source content.
@@ -143,4 +143,3 @@ func (c *Concept) TrustTier() string {
 	}
 	return tier
 }
-

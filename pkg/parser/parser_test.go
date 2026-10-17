@@ -88,6 +88,27 @@ Body`,
 	}
 }
 
+func TestParseConceptReaderSourceResource(t *testing.T) {
+	input := `---
+type: Metric
+sources:
+  - resource: ../references/source.md
+    title: Source document
+---
+Body`
+
+	concept, err := ParseConceptReader(strings.NewReader(input), "metrics/example.md", "metrics/example")
+	if err != nil {
+		t.Fatalf("ParseConceptReader returned error: %v", err)
+	}
+	if len(concept.Frontmatter.Sources) != 1 {
+		t.Fatalf("expected one source, got %d", len(concept.Frontmatter.Sources))
+	}
+	if got := concept.Frontmatter.Sources[0].Resource; got != "../references/source.md" {
+		t.Errorf("expected source resource %q, got %q", "../references/source.md", got)
+	}
+}
+
 func TestDefaultParseOptions(t *testing.T) {
 	opts := DefaultParseOptions()
 	expectedMaxSize := int64(10 * 1024 * 1024)

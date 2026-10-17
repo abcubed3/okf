@@ -22,7 +22,7 @@ func TestValidateTrustSignalsV02(t *testing.T) {
 			Status:     "stable",
 			StaleAfter: futureTime,
 			Sources: []bundle.Source{
-				{URI: "https://stripe.com", Title: "Stripe Billing Docs", Author: "Stripe Team"},
+				{Resource: "https://stripe.com", Title: "Stripe Billing Docs", Author: "Stripe Team"},
 			},
 			Generated: &bundle.ActorInfo{By: "harvest-job", At: time.Now().Format(time.RFC3339)},
 			Verified: []bundle.ActorInfo{

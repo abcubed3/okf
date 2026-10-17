@@ -1,17 +1,21 @@
 package cli
 
 import (
+	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
 
 func TestRunLint_InvalidPath(t *testing.T) {
-	err := RunLint([]string{"/path/does/not/exist/12345"})
+	invalidPath := filepath.Join(t.TempDir(), "missing-bundle")
+	err := RunLint([]string{invalidPath})
 	if err == nil {
-		t.Errorf("Expected error for invalid path, got nil")
+		t.Fatal("expected error for invalid path, got nil")
 	}
-	if !strings.Contains(err.Error(), "failed to resolve bundle path") && !strings.Contains(err.Error(), "no such file") {
-		t.Errorf("Expected resolution error, got %v", err)
+	if !strings.Contains(err.Error(), "failed to parse bundle") || !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("expected bundle parse error for missing path, got %v", err)
 	}
 }
 
