@@ -2,8 +2,10 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -35,6 +37,9 @@ func RunLint(args []string) error {
 
 	localPath, cleanup, err := parser.ResolvePath(bundlePath)
 	if err != nil {
+		if !parser.IsGitURL(bundlePath) && errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("failed to parse bundle: %w", err)
+		}
 		return fmt.Errorf("failed to resolve bundle path: %w", err)
 	}
 	defer cleanup()
