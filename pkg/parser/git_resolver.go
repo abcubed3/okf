@@ -25,6 +25,10 @@ func IsGitURL(path string) bool {
 // If it is a local path, it returns the path as-is with a no-op cleanup function.
 func ResolvePath(path string) (string, func(), error) {
 	if !IsGitURL(path) {
+		// Verify local path exists for non-git URLs.
+		if _, err := os.Stat(path); err != nil {
+			return "", func() {}, err
+		}
 		return path, func() {}, nil
 	}
 
