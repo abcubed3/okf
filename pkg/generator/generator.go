@@ -42,9 +42,9 @@ type ConceptJSON struct {
 	TrustTier   string              `json:"trustTier,omitempty"`
 	StaleAfter  string              `json:"staleAfter,omitempty"`
 	Sources     []bundle.Source     `json:"sources,omitempty"`
-	Generated   *bundle.ActorInfo   `json:"generated,omitempty"`
-	Verified    []bundle.ActorInfo  `json:"verified,omitempty"`
-	Attestation *bundle.Attestation `json:"attestation,omitempty"`
+	Generated   *bundle.ActorInfo    `json:"generated,omitempty"`
+	Verified    bundle.ActorInfoList `json:"verified,omitempty"`
+	Attestation *bundle.Attestation  `json:"attestation,omitempty"`
 
 	// Body is the raw markdown content of this concept.
 	Body string `json:"body"`

@@ -4,6 +4,15 @@ package bundle
 import (
 	"strings"
 	"time"
+
+	"gopkg.in/yaml.v3"
+)
+
+// Trust tier constants as defined in OKF Spec §5.3.
+const (
+	TrustTierUnverified       = "unverified"
+	TrustTierMachineConfirmed = "machine-confirmed"
+	TrustTierHumanReviewed    = "human-reviewed"
 )
 
 // Source represents provenance information for an OKF v0.2 concept document.
@@ -21,13 +30,67 @@ type Source struct {
 }
 
 // ActorInfo records details about an actor (human or machine) in concept creation or verification.
+// Per OKF Spec §5.2 and §7, frontmatter records objective actor signals ('by' and 'at'),
+// while trust tiers are inferred via Tier() rather than stored in frontmatter.
 type ActorInfo struct {
-	// By identifies the actor username, agent ID, or system name.
+	// By identifies the actor username, agent ID, or system name (§7).
 	By string `yaml:"by,omitempty" json:"by,omitempty"`
 	// At is the RFC3339 timestamp of the action.
 	At string `yaml:"at,omitempty" json:"at,omitempty"`
-	// Tier specifies the verification confidence level (e.g. "human", "automated", "certified").
-	Tier string `yaml:"tier,omitempty" json:"tier,omitempty"`
+}
+
+// IsHuman reports whether the actor follows the human convention ("human:<id>") per OKF Spec §7.
+func (a ActorInfo) IsHuman() bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(a.By)), "human:")
+}
+
+// Tier derives the trust tier for this actor per OKF Spec §5.3:
+// - "human-reviewed" for human:<id> actors
+// - "machine-confirmed" for non-human, non-empty actors (e.g. process:<id>, agent/<version>)
+// - "unverified" if By is empty
+func (a ActorInfo) Tier() string {
+	return DeriveActorTrustTier(a.By)
+}
+
+// DeriveActorTrustTier derives the trust tier from an actor identity string according to OKF Spec §5.3 and §7.
+func DeriveActorTrustTier(by string) string {
+	by = strings.TrimSpace(by)
+	if by == "" {
+		return TrustTierUnverified
+	}
+	if strings.HasPrefix(strings.ToLower(by), "human:") {
+		return TrustTierHumanReviewed
+	}
+	return TrustTierMachineConfirmed
+}
+
+// ActorInfoList represents a list of ActorInfo that supports unmarshaling from
+// either a sequence (list) or a single bare mapping (as per OKF Spec §5.2).
+type ActorInfoList []ActorInfo
+
+// UnmarshalYAML implements custom unmarshaling to support both:
+//   verified:
+//     - { by: "human:alice", at: "2026-06-25T09:00:00Z" }
+// and bare mapping:
+//   verified: { by: "human:alice", at: "2026-06-25T09:00:00Z" }
+func (al *ActorInfoList) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind == yaml.MappingNode {
+		var single ActorInfo
+		if err := value.Decode(&single); err != nil {
+			return err
+		}
+		*al = []ActorInfo{single}
+		return nil
+	}
+	if value.Kind == yaml.SequenceNode {
+		var list []ActorInfo
+		if err := value.Decode(&list); err != nil {
+			return err
+		}
+		*al = list
+		return nil
+	}
+	return nil
 }
 
 // Attestation defines a sanctioned computation method for calculating concept values in OKF v0.2.
@@ -64,7 +127,8 @@ type Frontmatter struct {
 	// Generated records creation metadata (actor and timestamp).
 	Generated *ActorInfo `yaml:"generated,omitempty"`
 	// Verified lists independent confirmations of accuracy (human or automated).
-	Verified []ActorInfo `yaml:"verified,omitempty"`
+	// Supports both a YAML sequence or a single bare mapping (§5.2).
+	Verified ActorInfoList `yaml:"verified,omitempty"`
 	// StaleAfter defines an absolute RFC3339 expiration date after which re-verification is required.
 	StaleAfter string `yaml:"stale_after,omitempty"`
 	// Status specifies the lifecycle state ("draft", "stable", "deprecated").
@@ -118,27 +182,30 @@ func (c *Concept) IsStale(now time.Time) bool {
 	return now.After(t)
 }
 
-// IsVerified returns true if the concept has at least one verification record.
+// IsVerified returns true if the concept has at least one valid verification record (trust tier is not unverified).
 func (c *Concept) IsVerified() bool {
-	return len(c.Frontmatter.Verified) > 0
+	return c.TrustTier() != TrustTierUnverified
 }
 
-// TrustTier returns the highest verification tier ("certified", "human", "automated", or "unverified").
+// TrustTier returns the highest derived verification tier according to OKF Spec §5.3:
+// - "unverified" if verified is missing, empty, or has no recognized verifiers
+// - "machine-confirmed" if verified by non-human actors only
+// - "human-reviewed" if verified by at least one human:<id> actor
 func (c *Concept) TrustTier() string {
 	if len(c.Frontmatter.Verified) == 0 {
-		return "unverified"
+		return TrustTierUnverified
 	}
-	tier := "verified"
+	hasMachine := false
 	for _, v := range c.Frontmatter.Verified {
-		t := strings.ToLower(v.Tier)
-		if t == "certified" {
-			return "certified"
+		if v.IsHuman() {
+			return TrustTierHumanReviewed
 		}
-		if t == "human" {
-			tier = "human"
-		} else if t == "automated" && tier != "human" {
-			tier = "automated"
+		if strings.TrimSpace(v.By) != "" {
+			hasMachine = true
 		}
 	}
-	return tier
+	if hasMachine {
+		return TrustTierMachineConfirmed
+	}
+	return TrustTierUnverified
 }

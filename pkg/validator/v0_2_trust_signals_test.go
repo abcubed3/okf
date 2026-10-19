@@ -24,9 +24,9 @@ func TestValidateTrustSignalsV02(t *testing.T) {
 			Sources: []bundle.Source{
 				{URI: "https://stripe.com", Title: "Stripe Billing Docs", Author: "Stripe Team"},
 			},
-			Generated: &bundle.ActorInfo{By: "harvest-job", At: time.Now().Format(time.RFC3339)},
+			Generated: &bundle.ActorInfo{By: "process:harvest-job", At: time.Now().Format(time.RFC3339)},
 			Verified: []bundle.ActorInfo{
-				{By: "alice", At: time.Now().Format(time.RFC3339), Tier: "human"},
+				{By: "human:alice", At: time.Now().Format(time.RFC3339)},
 			},
 		},
 		Body: "MRR calculation rules.",
@@ -168,15 +168,15 @@ func TestConceptTrustHelpers(t *testing.T) {
 	cVer := &bundle.Concept{
 		Frontmatter: bundle.Frontmatter{
 			Verified: []bundle.ActorInfo{
-				{By: "bot", Tier: "automated"},
-				{By: "lead", Tier: "certified"},
+				{By: "process:bot"},
+				{By: "human:lead"},
 			},
 		},
 	}
 	if !cVer.IsVerified() {
 		t.Errorf("expected concept to be verified")
 	}
-	if cVer.TrustTier() != "certified" {
-		t.Errorf("expected trust tier 'certified', got %q", cVer.TrustTier())
+	if cVer.TrustTier() != bundle.TrustTierHumanReviewed {
+		t.Errorf("expected trust tier %q, got %q", bundle.TrustTierHumanReviewed, cVer.TrustTier())
 	}
 }

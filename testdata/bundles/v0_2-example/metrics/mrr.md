@@ -24,9 +24,8 @@ generated:
   at: "2026-08-01T12:00:00Z"
 
 verified:
-  - by: "lead-data-architect@company.com"
+  - by: "human:lead-data-architect@company.com"
     at: "2026-08-01T12:15:00Z"
-    tier: "human"
 ---
 
 # Monthly Recurring Revenue (MRR)
