@@ -108,4 +108,3 @@ func (b *Bundle) ConceptsByTrustTier(tier string) []*Concept {
 	})
 	return results
 }
-

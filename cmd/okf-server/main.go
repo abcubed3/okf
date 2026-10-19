@@ -14,9 +14,9 @@ import (
 
 func main() {
 	bundlePath := flag.String("bundle", ".", "Path to the OKF knowledge bundle directory")
-	transport := flag.String("transport", "sse", "Transport mode: 'sse' or 'stdio'")
+	transport := flag.String("transport", "http", "Transport mode: 'http' or 'stdio'")
 	port := flag.Int("port", 8080, "Port for server")
-	token := flag.String("token", "", "Optional authentication token for SSE transport")
+	token := flag.String("token", "", "Optional authentication token for HTTP transport")
 	flag.Parse()
 
 	localPath, cleanup, err := parser.ResolvePath(*bundlePath)
@@ -41,10 +41,10 @@ func main() {
 	srv.Token = *token
 	ctx := context.Background()
 
-	if *transport == "sse" {
+	if *transport == "http" {
 		addr := fmt.Sprintf(":%d", *port)
-		fmt.Fprintf(os.Stderr, "Starting OKF Server daemon over SSE at http://localhost%s...\n", addr)
-		if err := srv.StartSSE(addr); err != nil {
+		fmt.Fprintf(os.Stderr, "Starting OKF Server daemon over HTTP at http://localhost%s...\n", addr)
+		if err := srv.StartHTTP(addr); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: server failed: %v\n", err)
 			os.Exit(1)
 		}

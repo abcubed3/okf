@@ -86,27 +86,27 @@ func RunAssemble(args []string) error {
 func renderTokenMonitor(maxTokens int, res *assembly.AssemblyResult) {
 	fmt.Fprintf(os.Stderr, "Token Budget Monitor (Max: %d)\n", maxTokens)
 	fmt.Fprintf(os.Stderr, "------------------------------------------------\n")
-	
+
 	const barWidth = 20
-	
+
 	for _, node := range res.Nodes {
 		pct := 0.0
 		if maxTokens > 0 {
 			pct = float64(node.Tokens) / float64(maxTokens)
 		}
-		
+
 		filled := int(pct * float64(barWidth))
 		if filled > barWidth {
 			filled = barWidth
 		}
 		empty := barWidth - filled
-		
+
 		bar := strings.Repeat("█", filled) + strings.Repeat("░", empty)
 		fmt.Fprintf(os.Stderr, "%-20s [%s] %d tokens (%.1f%%)\n", node.ID, bar, node.Tokens, pct*100)
 	}
-	
+
 	fmt.Fprintf(os.Stderr, "------------------------------------------------\n")
-	
+
 	totalPct := 0.0
 	if maxTokens > 0 {
 		totalPct = float64(res.TotalTokens) / float64(maxTokens)
@@ -116,7 +116,7 @@ func renderTokenMonitor(maxTokens int, res *assembly.AssemblyResult) {
 		totalFilled = barWidth
 	}
 	totalEmpty := barWidth - totalFilled
-	
+
 	totalBar := strings.Repeat("█", totalFilled) + strings.Repeat("░", totalEmpty)
 	fmt.Fprintf(os.Stderr, "%-20s [%s] %d tokens (%.1f%%)\n\n", "Total", totalBar, res.TotalTokens, totalPct*100)
 }
