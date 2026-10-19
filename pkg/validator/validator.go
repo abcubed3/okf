@@ -178,23 +178,41 @@ func validateTrustSignals(c *bundle.Concept) []Issue {
 		}
 	}
 
-	// 3. Generated timestamp check
-	if c.Frontmatter.Generated != nil && c.Frontmatter.Generated.At != "" {
-		genAt := strings.TrimSpace(c.Frontmatter.Generated.At)
-		if _, err := time.Parse(time.RFC3339, genAt); err != nil {
-			if _, err := time.Parse("2006-01-02", genAt); err != nil {
-				issues = append(issues, Issue{
-					ConceptID: c.ID,
-					Path:      c.Path,
-					Severity:  SeverityWarning,
-					Message:   fmt.Sprintf("invalid 'generated.at' date format '%s'", genAt),
-				})
+	// 3. Generated timestamp and actor check
+	if c.Frontmatter.Generated != nil {
+		if strings.TrimSpace(c.Frontmatter.Generated.By) == "" {
+			issues = append(issues, Issue{
+				ConceptID: c.ID,
+				Path:      c.Path,
+				Severity:  SeverityWarning,
+				Message:   "generated frontmatter block is missing 'by' actor identifier",
+			})
+		}
+		if c.Frontmatter.Generated.At != "" {
+			genAt := strings.TrimSpace(c.Frontmatter.Generated.At)
+			if _, err := time.Parse(time.RFC3339, genAt); err != nil {
+				if _, err := time.Parse("2006-01-02", genAt); err != nil {
+					issues = append(issues, Issue{
+						ConceptID: c.ID,
+						Path:      c.Path,
+						Severity:  SeverityWarning,
+						Message:   fmt.Sprintf("invalid 'generated.at' date format '%s'", genAt),
+					})
+				}
 			}
 		}
 	}
 
 	// 4. Verified records check
 	for i, v := range c.Frontmatter.Verified {
+		if strings.TrimSpace(v.By) == "" {
+			issues = append(issues, Issue{
+				ConceptID: c.ID,
+				Path:      c.Path,
+				Severity:  SeverityWarning,
+				Message:   fmt.Sprintf("verified[%d] record is missing 'by' actor identifier", i),
+			})
+		}
 		if v.At != "" {
 			verAt := strings.TrimSpace(v.At)
 			if _, err := time.Parse(time.RFC3339, verAt); err != nil {

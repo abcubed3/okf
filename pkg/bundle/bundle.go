@@ -95,11 +95,20 @@ func (b *Bundle) ConceptsByStatus(status string) []*Concept {
 	return results
 }
 
-// ConceptsByTrustTier returns all concepts matching a given trust tier ("certified", "human", "automated", "unverified"), sorted by ID.
+// ConceptsByTrustTier returns all concepts matching a given trust tier ("human-reviewed", "machine-confirmed", "unverified"), sorted by ID.
+// For backwards compatibility, it normalizes legacy aliases ("human" -> "human-reviewed", "automated"/"machine" -> "machine-confirmed", "certified" -> "human-reviewed").
 func (b *Bundle) ConceptsByTrustTier(tier string) []*Concept {
+	target := strings.ToLower(strings.TrimSpace(tier))
+	switch target {
+	case "human", "certified":
+		target = TrustTierHumanReviewed
+	case "automated", "machine":
+		target = TrustTierMachineConfirmed
+	}
+
 	var results []*Concept
 	for _, c := range b.Concepts {
-		if strings.EqualFold(c.TrustTier(), tier) {
+		if strings.EqualFold(c.TrustTier(), target) {
 			results = append(results, c)
 		}
 	}

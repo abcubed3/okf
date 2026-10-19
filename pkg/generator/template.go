@@ -658,9 +658,9 @@ const HTMLTemplate = `<!DOCTYPE html>
         .trust-badge.status-draft      { background: rgba(245,158,11,0.15); color: #d97706; border: 1px solid rgba(245,158,11,0.3); }
         .trust-badge.status-deprecated { background: rgba(239,68,68,0.15); color: #dc2626; border: 1px solid rgba(239,68,68,0.3); }
 
+        .trust-badge.tier-human-reviewed, .trust-badge.tier-human       { background: rgba(37,99,235,0.15); color: #2563eb; border: 1px solid rgba(37,99,235,0.3); }
+        .trust-badge.tier-machine-confirmed, .trust-badge.tier-automated { background: rgba(100,116,139,0.15); color: #475569; border: 1px solid rgba(100,116,139,0.3); }
         .trust-badge.tier-certified   { background: rgba(139,92,246,0.15); color: #7c3aed; border: 1px solid rgba(139,92,246,0.3); }
-        .trust-badge.tier-human       { background: rgba(37,99,235,0.15); color: #2563eb; border: 1px solid rgba(37,99,235,0.3); }
-        .trust-badge.tier-automated   { background: rgba(100,116,139,0.15); color: #475569; border: 1px solid rgba(100,116,139,0.3); }
         .trust-badge.tier-unverified  { background: rgba(148,163,184,0.1); color: #94a3b8; border: 1px solid rgba(148,163,184,0.2); }
 
         .trust-badge.freshness-ok     { background: rgba(16,185,129,0.1); color: #10b981; }

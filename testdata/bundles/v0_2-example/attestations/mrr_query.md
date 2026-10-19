@@ -21,9 +21,8 @@ generated:
   at: "2026-08-01T12:00:00Z"
 
 verified:
-  - by: "compliance-officer@company.com"
+  - by: "human:compliance-officer@company.com"
     at: "2026-08-01T12:20:00Z"
-    tier: "certified"
 ---
 
 # Sanctioned MRR Calculation Query
