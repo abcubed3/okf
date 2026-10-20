@@ -2,12 +2,15 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/abcubed3/okf/pkg/bundle"
 	"github.com/abcubed3/okf/pkg/config"
 	"github.com/abcubed3/okf/pkg/parser"
 	"github.com/abcubed3/okf/pkg/validator"
@@ -34,6 +37,9 @@ func RunLint(args []string) error {
 
 	localPath, cleanup, err := parser.ResolvePath(bundlePath)
 	if err != nil {
+		if !parser.IsGitURL(bundlePath) && errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("failed to parse bundle: %w", err)
+		}
 		return fmt.Errorf("failed to resolve bundle path: %w", err)
 	}
 	defer cleanup()
@@ -85,7 +91,7 @@ func RunLint(args []string) error {
 		if c.IsStale(now) {
 			staleCount++
 		}
-		if strings.EqualFold(c.Frontmatter.Status, "deprecated") {
+		if strings.EqualFold(string(c.Frontmatter.Status), string(bundle.ConceptLifecycleDeprecated)) {
 			deprecatedCount++
 		}
 	}

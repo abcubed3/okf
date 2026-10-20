@@ -85,7 +85,7 @@ func (b *Bundle) ConceptsByType(t string) []*Concept {
 func (b *Bundle) ConceptsByStatus(status string) []*Concept {
 	var results []*Concept
 	for _, c := range b.Concepts {
-		if strings.EqualFold(c.Frontmatter.Status, status) {
+		if strings.EqualFold(string(c.Frontmatter.Status), status) {
 			results = append(results, c)
 		}
 	}

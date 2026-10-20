@@ -19,10 +19,10 @@ func TestValidateTrustSignalsV02(t *testing.T) {
 			Type:       "Metric",
 			Title:      "Monthly Recurring Revenue",
 			Desc:       "Sum of recurring subscription revenues.",
-			Status:     "stable",
+			Status:     bundle.ConceptLifecycleStable,
 			StaleAfter: futureTime,
 			Sources: []bundle.Source{
-				{URI: "https://stripe.com", Title: "Stripe Billing Docs", Author: "Stripe Team"},
+				{Resource: "https://stripe.com", Title: "Stripe Billing Docs", Author: "Stripe Team"},
 			},
 			Generated: &bundle.ActorInfo{By: "process:harvest-job", At: time.Now().Format(time.RFC3339)},
 			Verified: []bundle.ActorInfo{
@@ -40,7 +40,7 @@ func TestValidateTrustSignalsV02(t *testing.T) {
 			Type:   "Legacy Metric",
 			Title:  "Old MRR",
 			Desc:   "Deprecated calculation method.",
-			Status: "deprecated",
+			Status: bundle.ConceptLifecycleDeprecated,
 		},
 		Body: "Old body.",
 	}
@@ -53,7 +53,7 @@ func TestValidateTrustSignalsV02(t *testing.T) {
 			Type:   "Metric",
 			Title:  "Status Test",
 			Desc:   "Testing status validation.",
-			Status: "unknown-state",
+			Status: bundle.ConceptLifecycleStatus("unknown-state"),
 		},
 		Body: "Body.",
 	}
