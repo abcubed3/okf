@@ -8,7 +8,21 @@
   <b>A high-performance Open Knowledge Format (OKF) tool suite written in Go for AI Agents, Context Traversal, and Model Context Protocol.</b>
 </p>
 
+<p align="center">
+  <a href="https://github.com/abcubed3/okf/releases/tag/v1.0.4"><img src="https://img.shields.io/badge/release-v1.0.4-blue.svg" alt="Release v1.0.4" /></a>
+  <a href="https://github.com/GoogleCloudPlatform/knowledge-catalog"><img src="https://img.shields.io/badge/OKF%20Spec-v0.2-green.svg" alt="OKF Spec v0.2" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License" /></a>
+</p>
+
 ---
+
+> [!TIP]
+> **🚀 What's New in Release v1.0.4:**
+> - **AI Agent Skills Engine (`okf skill`)**: Compile any OKF knowledge bundle into a production-grade Agent Skill (`SKILL.md`) for Google Antigravity, Claude Code, Cursor, Windsurf, and Codex. Includes `okf skill install` for one-command installation of the official OKF skill into developer workspaces (`.agents/skills/okf`).
+> - **Grounded AI Q&A (`okf ask`)**: Natural language question answering directly from the CLI backed by deterministic BFS context assembly and Gemini generative AI, citing verified concept files and verbatim attested computations.
+> - **MCP Server AI Tools**: Expanded the Model Context Protocol server with `export_agent_skill` and `ask_knowledge_base` tools.
+> - **Unified Skill Export**: Export to agent skills directly via `okf export skill`.
+> - **Validator Enhancements**: Support for dotted identifiers in resource identifiers and strict OKF v0.2 trust layer verification.
 
 The **Open Knowledge Format (OKF)** is a vendor-neutral, lightweight specification for structuring organizational knowledge (documentation, runbooks, metrics, database schemas, and API definitions) into machine-readable, human-friendly Markdown files.
 
@@ -107,10 +121,12 @@ This concept defines the sanctioned computation logic for financial reporting.
 - **Conformance Engine & Linter (`okf lint`):** Validates knowledge bundles for YAML frontmatter correctness, required attributes, broken internal links, and OKF v0.2 trust signal compliance.
 - **Metadata Harvesters (`okf harvest`):** Automatically extracts and converts schemas from databases (PostgreSQL, MySQL, Cloud Spanner, BigQuery), OpenAPI specs, Protobuf files, Git repositories, and web pages into OKF concept documents.
 - **Context Assembler (`okf assemble`):** Performs graph-based Breadth-First Search (BFS) starting from a core concept, resolving related concepts within a specified character/token budget to build pruned, high-quality prompt context.
-- **Model Context Protocol Server (`okf mcp`):** Exposes your knowledge base directly to MCP-compatible AI clients (e.g. Claude Desktop, Cursor, Antigravity) via Stdio or HTTP transport.
+- **Agent Skills Engine (`okf skill`):** Compile OKF knowledge bundles into production-grade AI Agent Skills (`SKILL.md`) for Antigravity, Claude, Cursor, and Codex, arming autonomous agents with verified schemas, attested SQL queries, and domain rules. Also provides `okf skill install` for deploying the official OKF skill into workspaces.
+- **Grounded AI Q&A (`okf ask`):** Query verified organizational knowledge using graph BFS context assembly + Gemini generative AI, providing grounded answers with source concept citations and verbatim attested computation queries.
+- **Model Context Protocol Server (`okf mcp`):** Exposes your knowledge base directly to MCP-compatible AI clients (e.g. Claude Desktop, Cursor, Antigravity) via Stdio or HTTP transport, with built-in tools for search, context assembly, dynamic skill compilation, and grounded Q&A.
 - **Bundle Operations (`okf diff` / `okf merge`):** Compare two OKF bundles for structural and content differences, or merge them to unify distributed knowledge bases.
 - **AI Curator (`--ai-enrich` flag):** AI-powered concept curation during metadata harvesting to automatically generate business descriptions and categorize concepts using Gemini models.
-- **JSON-LD Export (`okf export`):** Export your OKF graph into JSON-LD format for the semantic web.
+- **JSON-LD & Skill Export (`okf export`):** Export your OKF graph into JSON-LD format for the semantic web or directly into Agent Skills.
 - **Interactive HTML Portal Compiler (`okf doc`):** Compiles an OKF bundle into an interactive static web application with search, tagging, and link relationship graphs.
 - **Language Server Protocol Daemon (`okf lsp`) & VS Code Extension:** Runs an LSP server over Standard I/O to publish diagnostic errors/warnings in real-time inside IDEs. A dedicated VS Code Extension is also available.
 - **Bi-directional Sync Daemon (`okf sync`):** Automatically synchronizes local concepts with remote document nodes in Notion, Confluence, Jira, and Google Drive.
@@ -420,6 +436,8 @@ To register the OKF-go MCP server with Claude Desktop, add the server to your `c
   - `search_concepts`: Search matching terms in concept IDs, titles, descriptions, and tags.
   - `get_concept`: Fetch raw contents of a concept.
   - `assemble_context`: Run depth-traversal context assembly dynamically from the LLM.
+  - `export_agent_skill`: Compile the bundle (or filtered tags) into an Agent Skill (`SKILL.md`) dynamically.
+  - `ask_knowledge_base`: Perform grounded Q&A over the knowledge graph with trust verification.
 
 ---
 
@@ -486,6 +504,56 @@ connectors:
     domain: "your-company.atlassian.net"
     email: "user@company.com"
     token: "jira_api_token_here"
+```
+
+---
+
+### 8. AI Agent Skills Engine (`skill`)
+
+Bridge organizational knowledge directly into autonomous coding agents (Google Antigravity, Claude Code, Cursor, Windsurf, GitHub Copilot).
+
+#### A. Exporting a Bundle to an Agent Skill (`okf skill export`)
+Compiles an OKF bundle or filtered tag subset into an authoritative `SKILL.md` file containing verified schema dictionaries, business metric rules, and sanctioned computation queries:
+
+```bash
+# Compile entire bundle into an Agent Skill
+okf skill export --bundle ./knowledge --output .agents/skills/data-warehouse/SKILL.md --name "data-warehouse"
+
+# Filter by domain tags and types
+okf skill export --bundle ./knowledge --output .agents/skills/finance/SKILL.md --name "finance" --tags "finance,revenue"
+
+# Using unified export command
+okf export skill --bundle ./knowledge --output ./SKILL.md
+```
+
+#### B. Installing the Official OKF Skill (`okf skill install`)
+Installs the official OKF Agent Skill into your project or IDE configuration:
+
+```bash
+# Install into default workspace location (.agents/skills/okf)
+okf skill install
+
+# Target specific agent platform
+okf skill install --platform claude   # Installs to .claude/skills/okf
+okf skill install --platform cursor   # Installs to .cursor/skills/okf
+okf skill install --dir /path/to/dir  # Installs to explicit path
+```
+
+---
+
+### 9. Grounded AI Q&A (`ask`)
+
+Query verified organizational knowledge from the command line using deterministic graph BFS context assembly combined with Gemini generative AI:
+
+```bash
+# Ask a question across the knowledge bundle
+okf ask "How is monthly recurring revenue calculated and which table stores subscriptions?" --bundle ./knowledge
+
+# Direct to a specific seed concept with deeper graph traversal
+okf ask "What are the downstream dependencies of users?" --seed tables/users --depth 3 --bundle ./knowledge
+
+# Output raw answer text (ideal for piping into agent prompts or scripts)
+okf ask "What is the sanctioned query for MRR?" --bundle ./knowledge --raw
 ```
 
 ---

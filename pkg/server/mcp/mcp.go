@@ -11,9 +11,11 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/abcubed3/okf/pkg/ai"
 	"github.com/abcubed3/okf/pkg/assembly"
 	"github.com/abcubed3/okf/pkg/bundle"
 	"github.com/abcubed3/okf/pkg/parser"
+	"github.com/abcubed3/okf/pkg/skill"
 	"github.com/fsnotify/fsnotify"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"gopkg.in/yaml.v3"
@@ -203,6 +205,16 @@ func (s *Server) registerCapabilities() {
 		Name:        "assemble_context",
 		Description: "Build a pruned, cohesive context subset of the concept graph starting from a concept ID, traversing related links.",
 	}, s.handleAssembleContext)
+
+	sdk.AddTool(s.sdkServer, &sdk.Tool{
+		Name:        "export_agent_skill",
+		Description: "Compile the OKF bundle (or a filtered tag/type subset) into an AI Agent Skill (SKILL.md) for IDE coding agents.",
+	}, s.handleExportAgentSkill)
+
+	sdk.AddTool(s.sdkServer, &sdk.Tool{
+		Name:        "ask_knowledge_base",
+		Description: "Answer natural language questions grounded strictly against the OKF bundle concepts and attested computations.",
+	}, s.handleAskKnowledgeBase)
 }
 
 // StartStdio starts the server using the standard input/output transport.
@@ -607,3 +619,127 @@ func (s *Server) handleAssembleContext(ctx context.Context, req *sdk.CallToolReq
 			Nodes:           res.Nodes,
 		}, nil
 }
+
+// ExportAgentSkillArgs defines parameters for exporting an agent skill.
+type ExportAgentSkillArgs struct {
+	Name                *string `json:"name,omitempty" jsonschema:"optional skill name (e.g. finance-metrics)"`
+	Description         *string `json:"description,omitempty" jsonschema:"optional description for agent activation"`
+	Tag                 *string `json:"tag,omitempty" jsonschema:"optional tag to filter concepts"`
+	Type                *string `json:"type,omitempty" jsonschema:"optional concept type to filter"`
+	IncludeAttestations *bool   `json:"include_attestations,omitempty" jsonschema:"whether to include sanctioned computation queries (default true)"`
+}
+
+// ExportAgentSkillResult contains the generated SKILL.md.
+type ExportAgentSkillResult struct {
+	Name          string `json:"name"`
+	SkillMarkdown string `json:"skillMarkdown"`
+}
+
+// handleExportAgentSkill compiles the OKF bundle into an Agent Skill.
+func (s *Server) handleExportAgentSkill(ctx context.Context, req *sdk.CallToolRequest, args ExportAgentSkillArgs) (*sdk.CallToolResult, ExportAgentSkillResult, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	name := "okf-domain-knowledge"
+	if args.Name != nil && *args.Name != "" {
+		name = *args.Name
+	}
+
+	desc := ""
+	if args.Description != nil {
+		desc = *args.Description
+	}
+
+	var tags []string
+	if args.Tag != nil && *args.Tag != "" {
+		tags = []string{*args.Tag}
+	}
+
+	var types []string
+	if args.Type != nil && *args.Type != "" {
+		types = []string{*args.Type}
+	}
+
+	includeAttestations := true
+	if args.IncludeAttestations != nil {
+		includeAttestations = *args.IncludeAttestations
+	}
+
+	opts := skill.ExportOptions{
+		Name:                name,
+		Description:         desc,
+		Tags:                tags,
+		Types:               types,
+		IncludeAttestations: includeAttestations,
+	}
+
+	rendered, err := skill.ExportBundleToSkill(s.bundle, opts)
+	if err != nil {
+		return nil, ExportAgentSkillResult{}, err
+	}
+
+	return &sdk.CallToolResult{
+		Content: []sdk.Content{
+			&sdk.TextContent{
+				Text: rendered,
+			},
+		},
+	}, ExportAgentSkillResult{Name: name, SkillMarkdown: rendered}, nil
+}
+
+// AskKnowledgeBaseArgs defines parameters for asking questions over the bundle.
+type AskKnowledgeBaseArgs struct {
+	Query       string  `json:"query" jsonschema:"the natural language question to ask"`
+	SeedConcept *string `json:"seed_concept,omitempty" jsonschema:"optional seed concept ID"`
+	Depth       *int    `json:"depth,omitempty" jsonschema:"optional traversal depth (default 2)"`
+}
+
+// AskKnowledgeBaseResult contains the grounded answer and citations.
+type AskKnowledgeBaseResult struct {
+	Query              string   `json:"query"`
+	Answer             string   `json:"answer"`
+	SeedConcept        string   `json:"seedConcept"`
+	ReferencedConcepts []string `json:"referencedConcepts"`
+	Attestations       []string `json:"attestations"`
+}
+
+// handleAskKnowledgeBase performs grounded Q&A over the OKF knowledge graph.
+func (s *Server) handleAskKnowledgeBase(ctx context.Context, req *sdk.CallToolRequest, args AskKnowledgeBaseArgs) (*sdk.CallToolResult, AskKnowledgeBaseResult, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	seed := ""
+	if args.SeedConcept != nil {
+		seed = *args.SeedConcept
+	}
+
+	depth := 2
+	if args.Depth != nil {
+		depth = *args.Depth
+	}
+
+	opts := ai.AskOptions{
+		Depth:       depth,
+		SeedConcept: seed,
+	}
+
+	res, err := ai.AskBundle(ctx, s.bundle, args.Query, opts)
+	if err != nil {
+		return nil, AskKnowledgeBaseResult{}, err
+	}
+
+	return &sdk.CallToolResult{
+		Content: []sdk.Content{
+			&sdk.TextContent{
+				Text: res.Answer,
+			},
+		},
+	}, AskKnowledgeBaseResult{
+		Query:              res.Query,
+		Answer:             res.Answer,
+		SeedConcept:        res.SeedConcept,
+		ReferencedConcepts: res.ReferencedConcepts,
+		Attestations:       res.Attestations,
+	}, nil
+}
+

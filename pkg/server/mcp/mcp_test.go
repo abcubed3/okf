@@ -67,16 +67,18 @@ func TestMCPServer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to list tools: %v", err)
 	}
-	if len(tools.Tools) != 4 {
-		t.Errorf("expected 4 tools, got %d", len(tools.Tools))
+	if len(tools.Tools) != 6 {
+		t.Errorf("expected 6 tools, got %d", len(tools.Tools))
 	}
 
 	// Verify tool names
 	expectedTools := map[string]bool{
-		"list_concepts":    true,
-		"search_concepts":  true,
-		"get_concept":      true,
-		"assemble_context": true,
+		"list_concepts":      true,
+		"search_concepts":    true,
+		"get_concept":        true,
+		"assemble_context":   true,
+		"export_agent_skill": true,
+		"ask_knowledge_base": true,
 	}
 	for _, tl := range tools.Tools {
 		if !expectedTools[tl.Name] {
@@ -372,5 +374,54 @@ func TestMCPServer_InvalidBundle(t *testing.T) {
 	_, err := NewMCPServer("/nonexistent/path/that/does/not/exist")
 	if err == nil {
 		t.Error("expected error when creating server with nonexistent bundle path")
+	}
+}
+
+func TestMCPServer_ExportAgentSkill(t *testing.T) {
+	session, _ := newTestSession(t)
+	ctx := context.Background()
+
+	result, err := session.CallTool(ctx, &sdk.CallToolParams{
+		Name: "export_agent_skill",
+		Arguments: map[string]any{
+			"name": "sample-skill",
+		},
+	})
+	if err != nil {
+		t.Fatalf("export_agent_skill tool call failed: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("export_agent_skill returned error: %v", result.Content)
+	}
+
+	text := result.Content[0].(*sdk.TextContent).Text
+	if !strings.Contains(text, "name: sample-skill") {
+		t.Errorf("expected skill frontmatter with 'name: sample-skill', got: %s", text)
+	}
+	if !strings.Contains(text, "Users Table") {
+		t.Errorf("expected Users Table to be included in exported skill")
+	}
+}
+
+func TestMCPServer_AskKnowledgeBase(t *testing.T) {
+	session, _ := newTestSession(t)
+	ctx := context.Background()
+
+	result, err := session.CallTool(ctx, &sdk.CallToolParams{
+		Name: "ask_knowledge_base",
+		Arguments: map[string]any{
+			"query": "Where are users stored?",
+		},
+	})
+	if err != nil {
+		t.Fatalf("ask_knowledge_base tool call failed: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("ask_knowledge_base returned error: %v", result.Content)
+	}
+
+	text := result.Content[0].(*sdk.TextContent).Text
+	if !strings.Contains(text, "tables/users") {
+		t.Errorf("expected answer to reference tables/users, got: %s", text)
 	}
 }

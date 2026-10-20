@@ -52,6 +52,10 @@ func Execute(args []string, version, commit, date string) error {
 		return RunPull(cmdArgs)
 	case "search":
 		return RunSearch(cmdArgs)
+	case "skill":
+		return RunSkill(cmdArgs)
+	case "ask":
+		return RunAsk(cmdArgs)
 	case "auth":
 		return RunAuth(cmdArgs)
 	case "version", "-v", "--version", "-version":
@@ -91,6 +95,8 @@ func printUsage() {
 	fmt.Println("  push [path] [flags]      Push incremental updates to an OKF bundle")
 	fmt.Println("  pull <uri> [flags]       Pull an OKF bundle from the Hub")
 	fmt.Println("  search [query] [flags]   Search public and private OKF bundles on the Hub")
+	fmt.Println("  skill <subcommand> [...] Manage AI Agent Skills (export bundle to SKILL.md, install official skill)")
+	fmt.Println("  ask \"<question>\" [flags] Ask grounded questions over the OKF knowledge graph")
 	fmt.Println("  version, -v, --version   Print version information")
 	fmt.Println("  help, -h, --help         Display help information")
 }

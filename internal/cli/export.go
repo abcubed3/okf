@@ -15,6 +15,7 @@ func printExportUsage() {
 	fmt.Println("Usage: okf export <type> [flags]")
 	fmt.Println("\nAvailable export types:")
 	fmt.Println("  jsonld     Export OKF bundle to Schema.org JSON-LD")
+	fmt.Println("  skill      Export OKF bundle to an AI Agent Skill (SKILL.md)")
 }
 
 // RunExport routes the export subcommand execution to the appropriate format exporter.
@@ -29,6 +30,8 @@ func RunExport(args []string) error {
 	switch exportType {
 	case "jsonld":
 		return runExportJSONLD(cmdArgs)
+	case "skill", "agent-skill":
+		return runSkillExport(cmdArgs)
 	default:
 		fmt.Printf("Unknown export type: %s\n\n", exportType)
 		printExportUsage()
