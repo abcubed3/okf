@@ -38,10 +38,10 @@ type ConceptJSON struct {
 	Timestamp string `json:"timestamp,omitempty"`
 
 	// --- OKF v0.2 Trust Signals ---
-	Status      string              `json:"status,omitempty"`
-	TrustTier   string              `json:"trustTier,omitempty"`
-	StaleAfter  string              `json:"staleAfter,omitempty"`
-	Sources     []bundle.Source     `json:"sources,omitempty"`
+	Status      string               `json:"status,omitempty"`
+	TrustTier   string               `json:"trustTier,omitempty"`
+	StaleAfter  string               `json:"staleAfter,omitempty"`
+	Sources     []bundle.Source      `json:"sources,omitempty"`
 	Generated   *bundle.ActorInfo    `json:"generated,omitempty"`
 	Verified    bundle.ActorInfoList `json:"verified,omitempty"`
 	Attestation *bundle.Attestation  `json:"attestation,omitempty"`

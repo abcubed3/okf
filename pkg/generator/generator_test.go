@@ -126,8 +126,7 @@ func BenchmarkGenerate(b *testing.B) {
 	}
 	defer os.RemoveAll(tempOutDir)
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		err := Generate(samplePath, tempOutDir)
 		if err != nil {
 			b.Fatalf("Generate() failed: %v", err)

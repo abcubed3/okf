@@ -60,7 +60,10 @@ The project utilizes [Task](https://taskfile.dev) for local development and buil
 - **Build locally:** `task build` (compiles and outputs `./okf` with build metadata)
 - **Run unit tests:** `task test`
 - **Run lint checks:** `task lint`
+- **Run micro-benchmarks:** `task benchmark`
 - **Local cross-compilation:** `task cross-compile` (outputs multi-platform binaries to `dist/bin/`)
+- **Check release status:** `task release:status` (inspects latest release tag, commit count, and commits since last release)
+- **Tag for release:** `task tag -- v1.0.4` or `task tag:patch` / `task tag:minor` / `task tag:major` (creates and pushes annotated semver tag with safety checks)
 - **Clean build directory:** `task clean`
 
 If you don't have `task` installed, you can build manually via:
@@ -135,19 +138,64 @@ task test
 
 ## 🚀 Automated Releasing
 
-Releases are built, packaged, and published to GitHub automatically using [GoReleaser](https://goreleaser.com) and GitHub Actions.
+Releases are built, packaged, and published to GitHub automatically using [GoReleaser](https://goreleaser.com) and GitHub Actions whenever a new semantic version tag is pushed.
 
-### How to trigger a new release
+### 1. Inspecting Release Status
 
-1. Ensure all changes are committed and pushed to the `main` branch.
-2. Create and push a new semantic version tag:
+Before cutting a release, check the repository release status to see all commits merged since the previous release tag:
 
-   ```bash
-   git tag -a v1.0.0 -m "Release v1.0.0"
-   git push origin v1.0.0
-   ```
+```bash
+task release:status
+```
 
-3. The **Release** GitHub Action workflow (`.github/workflows/release.yml`) will automatically run, compile the code for all major target operating systems/architectures, package them into archives, and publish a new GitHub Release with release notes and checksums.
+### 2. Creating and Pushing a Release Tag (via Task)
+
+The recommended way to trigger a release is using the `task` commands. These commands ensure your working tree is clean, enforce valid semantic versioning (`vMAJOR.MINOR.PATCH`), prevent accidental duplicate tags (protecting the immutable Go module proxy cache), and create annotated tags (`git tag -a`):
+
+#### Automated Version Bumping
+Automatically bump the version from the latest git tag and push to `origin`:
+
+```bash
+# Bump patch version (e.g., v1.0.3 -> v1.0.4) and push
+task tag:patch
+
+# Bump minor version (e.g., v1.0.3 -> v1.1.0) and push
+task tag:minor
+
+# Bump major version (e.g., v1.0.3 -> v2.0.0) and push
+task tag:major
+```
+
+#### Specifying an Explicit Version
+To tag an explicit version:
+
+```bash
+# Using CLI arguments after --
+task tag -- v1.0.4
+
+# Or using environment variables
+TAG=v1.0.4 task tag
+```
+
+#### Optional Flags & Configuration
+- **Custom annotation message:** `MESSAGE="Release v1.0.4: feature summary" task tag:patch`
+- **Dry run preview (do not create or push):** `DRY_RUN=true task tag:patch`
+- **Create local tag only (skip push):** `PUSH=false task tag -- v1.0.4`
+- **Push an existing local tag to origin:** `task tag:push -- v1.0.4` (or `task tag:push` for latest tag)
+- **Bypass uncommitted changes check:** `FORCE=true task tag:patch`
+
+### 3. Manual Tagging (Alternative)
+
+If you do not have `task` installed, you can create and push an annotated tag manually with git:
+
+```bash
+git tag -a v1.0.4 -m "Release v1.0.4"
+git push origin v1.0.4
+```
+
+### 4. GitHub Actions CI/CD Pipeline
+
+Once the tag is pushed to `origin`, the **Release** GitHub Action workflow (`.github/workflows/release.yml`) will automatically run, compile the code for all major target operating systems/architectures, package them into archives, and publish a new GitHub Release with release notes and checksums.
 
 ---
 

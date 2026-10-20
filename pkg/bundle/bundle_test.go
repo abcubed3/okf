@@ -222,24 +222,24 @@ func makeLargeTestBundle() *Bundle {
 
 func BenchmarkBundleListTypes(b *testing.B) {
 	bundle := makeLargeTestBundle()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		_ = bundle.ListTypes()
 	}
 }
 
 func BenchmarkBundleListTags(b *testing.B) {
 	bundle := makeLargeTestBundle()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		_ = bundle.ListTags()
 	}
 }
 
 func BenchmarkBundleConceptsByType(b *testing.B) {
 	bundle := makeLargeTestBundle()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		_ = bundle.ConceptsByType("PostgreSQL Table")
 	}
 }

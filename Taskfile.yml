@@ -57,3 +57,165 @@ tasks:
     desc: Remove build directories and binary
     cmds:
       - rm -rf dist/bin {{.BINARY_NAME}}
+
+  release:status:
+    desc: Show latest release tag, commit count, and commits since last release
+    silent: true
+    cmds:
+      - |
+        LATEST=$(git describe --tags --abbrev=0 2>/dev/null || echo "none")
+        echo "Latest release tag: $LATEST"
+        if [ "$LATEST" != "none" ]; then
+          COUNT=$(git rev-list "$LATEST..HEAD" --count)
+          echo "Commits since $LATEST: $COUNT"
+          if [ "$COUNT" -gt 0 ]; then
+            echo ""
+            git log "$LATEST..HEAD" --oneline
+          fi
+        fi
+
+  tag:
+    desc: Create an annotated git tag for release (e.g. task tag -- v1.0.4, TAG=v1.0.4 task tag)
+    silent: true
+    cmds:
+      - |
+        RAW=$(echo "{{.CLI_ARGS}}" | sed -E 's/^[Tt][Aa][Gg]=//' | sed 's/^v*//' | tr -d ' ')
+        if [ -z "$RAW" ]; then
+          RAW=$(echo "$TAG" | sed -E 's/^[Tt][Aa][Gg]=//' | sed 's/^v*//' | tr -d ' ')
+        fi
+        FORCE="${FORCE:-false}"
+        PUSH="${PUSH:-true}"
+        DRY_RUN="${DRY_RUN:-false}"
+        MESSAGE="${MESSAGE:-}"
+
+        if [ -z "$RAW" ] || [ "$RAW" = "dev" ]; then
+          LATEST=$(git describe --tags --abbrev=0 2>/dev/null || echo "none")
+          echo "Error: No version/tag specified."
+          echo "Latest release tag: $LATEST"
+          echo ""
+          echo "Usage:"
+          echo "  task tag -- v1.0.4"
+          echo "  TAG=v1.0.4 task tag [MESSAGE=\"Release v1.0.4\"] [PUSH=true] [FORCE=true] [DRY_RUN=true]"
+          echo "  task tag:patch   (auto-increments patch from $LATEST)"
+          echo "  task tag:minor   (auto-increments minor from $LATEST)"
+          echo "  task tag:major   (auto-increments major from $LATEST)"
+          exit 1
+        fi
+
+        # Validate semver pattern (X.Y.Z or X.Y.Z-prerelease)
+        if ! echo "$RAW" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$'; then
+          echo "Error: '$RAW' is not a valid semantic version (expected X.Y.Z or X.Y.Z-prerelease)."
+          exit 1
+        fi
+
+        # Normalize tag to have leading 'v'
+        TAG="v$RAW"
+
+        # Check if working directory is clean unless FORCE=true
+        if [ "$FORCE" != "true" ] && [ "$FORCE" != "1" ]; then
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "Error: Working directory has uncommitted changes. Commit or stash them first, or pass FORCE=true."
+            exit 1
+          fi
+        fi
+
+        # Check if tag already exists
+        if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null 2>&1; then
+          echo "Error: Tag '$TAG' already exists! The Go module proxy caches released tags permanently. Do not re-tag."
+          exit 1
+        fi
+
+        # Set default message if not provided
+        if [ -z "$MESSAGE" ]; then
+          MESSAGE="Release $TAG"
+        fi
+
+        if [ "$DRY_RUN" = "true" ] || [ "$DRY_RUN" = "1" ]; then
+          echo "[DRY RUN] Would create annotated tag: $TAG ($MESSAGE)"
+          if [ "$PUSH" = "true" ] || [ "$PUSH" = "1" ]; then
+            echo "[DRY RUN] Would push tag '$TAG' to origin"
+          fi
+          exit 0
+        fi
+
+        echo "Creating annotated tag: $TAG ($MESSAGE)"
+        git tag -a "$TAG" -m "$MESSAGE"
+
+        if [ "$PUSH" = "true" ] || [ "$PUSH" = "1" ]; then
+          echo "Pushing tag '$TAG' to origin..."
+          git push origin "$TAG"
+        else
+          echo ""
+          echo "Tag '$TAG' created locally."
+          echo "Push to remote using: git push origin $TAG"
+          echo "Or run: task tag:push -- $TAG"
+        fi
+
+  tag:patch:
+    desc: Auto-bump patch version and tag (e.g. v1.0.3 -> v1.0.4)
+    silent: true
+    cmds:
+      - |
+        LATEST=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+        V_NUM=$(echo "$LATEST" | sed "s/^v//")
+        MAJOR=$(echo "$V_NUM" | cut -d. -f1)
+        MINOR=$(echo "$V_NUM" | cut -d. -f2)
+        PATCH=$(echo "$V_NUM" | cut -d. -f3 | cut -d- -f1)
+        NEXT_PATCH=$((PATCH + 1))
+        NEXT_TAG="v$MAJOR.$MINOR.$NEXT_PATCH"
+        echo "Bumping patch version: $LATEST -> $NEXT_TAG"
+        FORCE="${FORCE:-false}" PUSH="${PUSH:-true}" DRY_RUN="${DRY_RUN:-false}" MESSAGE="${MESSAGE:-}" task tag -- "$NEXT_TAG"
+
+  tag:minor:
+    desc: Auto-bump minor version and tag (e.g. v1.0.3 -> v1.1.0)
+    silent: true
+    cmds:
+      - |
+        LATEST=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+        V_NUM=$(echo "$LATEST" | sed "s/^v//")
+        MAJOR=$(echo "$V_NUM" | cut -d. -f1)
+        MINOR=$(echo "$V_NUM" | cut -d. -f2)
+        NEXT_MINOR=$((MINOR + 1))
+        NEXT_TAG="v$MAJOR.$NEXT_MINOR.0"
+        echo "Bumping minor version: $LATEST -> $NEXT_TAG"
+        FORCE="${FORCE:-false}" PUSH="${PUSH:-true}" DRY_RUN="${DRY_RUN:-false}" MESSAGE="${MESSAGE:-}" task tag -- "$NEXT_TAG"
+
+  tag:major:
+    desc: Auto-bump major version and tag (e.g. v1.0.3 -> v2.0.0)
+    silent: true
+    cmds:
+      - |
+        LATEST=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+        V_NUM=$(echo "$LATEST" | sed "s/^v//")
+        MAJOR=$(echo "$V_NUM" | cut -d. -f1)
+        NEXT_MAJOR=$((MAJOR + 1))
+        NEXT_TAG="v$NEXT_MAJOR.0.0"
+        echo "Note: In Go, a major version bump (v2+) requires a module path change (e.g. module github.com/abcubed3/okf/v2) per Go semantic import versioning."
+        echo "Bumping major version: $LATEST -> $NEXT_TAG"
+        FORCE="${FORCE:-false}" PUSH="${PUSH:-true}" DRY_RUN="${DRY_RUN:-false}" MESSAGE="${MESSAGE:-}" task tag -- "$NEXT_TAG"
+
+  tag:push:
+    desc: Push an existing tag to origin (e.g. task tag:push -- v1.0.4, TAG=v1.0.4 task tag:push)
+    silent: true
+    cmds:
+      - |
+        RAW=$(echo "{{.CLI_ARGS}}" | sed -E 's/^[Tt][Aa][Gg]=//' | sed 's/^v*//' | tr -d ' ')
+        if [ -z "$RAW" ]; then
+          RAW=$(echo "$TAG" | sed -E 's/^[Tt][Aa][Gg]=//' | sed 's/^v*//' | tr -d ' ')
+        fi
+        DRY_RUN="${DRY_RUN:-false}"
+        if [ -z "$RAW" ] || [ "$RAW" = "dev" ]; then
+          TAG=$(git describe --tags --abbrev=0 2>/dev/null)
+        else
+          TAG="v$RAW"
+        fi
+        if [ -z "$TAG" ]; then
+          echo "Error: No tag specified and no git tags found."
+          exit 1
+        fi
+        if [ "$DRY_RUN" = "true" ] || [ "$DRY_RUN" = "1" ]; then
+          echo "[DRY RUN] Would push tag '$TAG' to origin"
+          exit 0
+        fi
+        echo "Pushing tag '$TAG' to origin..."
+        git push origin "$TAG"

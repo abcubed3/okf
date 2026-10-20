@@ -123,10 +123,13 @@ func DeriveActorTrustTier(by string) string {
 type ActorInfoList []ActorInfo
 
 // UnmarshalYAML implements custom unmarshaling to support both:
-//   verified:
-//     - { by: "human:alice", at: "2026-06-25T09:00:00Z" }
+//
+//	verified:
+//	  - { by: "human:alice", at: "2026-06-25T09:00:00Z" }
+//
 // and bare mapping:
-//   verified: { by: "human:alice", at: "2026-06-25T09:00:00Z" }
+//
+//	verified: { by: "human:alice", at: "2026-06-25T09:00:00Z" }
 func (al *ActorInfoList) UnmarshalYAML(value *yaml.Node) error {
 	if value.Kind == yaml.MappingNode {
 		var single ActorInfo
