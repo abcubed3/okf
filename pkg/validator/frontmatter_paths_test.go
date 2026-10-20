@@ -162,10 +162,12 @@ func TestValidateFrontmatterPathsSkipsOpaqueResourceValues(t *testing.T) {
 		ID:   "metric",
 		Path: "metric.md",
 		Frontmatter: bundle.Frontmatter{
-			Resource: "analytics_mrr_daily",
+			Resource: "analytics.mrr_daily",
 			Sources: []bundle.Source{
 				{Resource: "all queries in BigQuery project X"},
 				{Resource: "https://example.com/source"},
+				{Resource: "bigquery.analytics.mrr_query"},
+				{Resource: "analytics_mrr_daily"},
 			},
 		},
 	}
@@ -174,6 +176,27 @@ func TestValidateFrontmatterPathsSkipsOpaqueResourceValues(t *testing.T) {
 
 	if issues := validateFrontmatterPaths(concept, b); len(issues) != 0 {
 		t.Fatalf("expected opaque values and URLs to be skipped, got: %+v", issues)
+	}
+}
+
+func TestValidateFrontmatterPathsWarnsOnExplicitMissingPaths(t *testing.T) {
+	concept := &bundle.Concept{
+		ID:   "metric",
+		Path: "metric.md",
+		Frontmatter: bundle.Frontmatter{
+			Resource: "./missing.custom",
+			Sources: []bundle.Source{
+				{Resource: "missing.sql"},
+				{Resource: "../references/missing.md"},
+			},
+		},
+	}
+	b := bundle.NewBundle(t.TempDir())
+	b.Concepts[concept.ID] = concept
+
+	issues := validateFrontmatterPaths(concept, b)
+	if len(issues) != 3 {
+		t.Fatalf("expected 3 broken path warnings for explicit missing paths, got %d: %+v", len(issues), issues)
 	}
 }
 

@@ -2,6 +2,7 @@
 package bundle
 
 import (
+	"encoding/json"
 	"strings"
 	"time"
 
@@ -37,6 +38,49 @@ type Source struct {
 	UsageCount int `yaml:"usage_count,omitempty" json:"usage_count,omitempty"`
 	// LastModified is the RFC3339 formatted modification date of the source.
 	LastModified string `yaml:"last_modified,omitempty" json:"last_modified,omitempty"`
+}
+
+// URI returns the source resource identifier for backward compatibility with OKF v0.1.
+//
+// Deprecated: Use Resource instead per OKF Spec v0.2 §5.1.
+func (s Source) URI() string {
+	return s.Resource
+}
+
+// UnmarshalYAML implements custom unmarshaling to support both 'resource' (v0.2)
+// and legacy 'uri' (v0.1) source field names.
+func (s *Source) UnmarshalYAML(value *yaml.Node) error {
+	type sourceAlias Source
+	var raw struct {
+		sourceAlias `yaml:",inline"`
+		URI         string `yaml:"uri,omitempty"`
+	}
+	if err := value.Decode(&raw); err != nil {
+		return err
+	}
+	*s = Source(raw.sourceAlias)
+	if s.Resource == "" && raw.URI != "" {
+		s.Resource = raw.URI
+	}
+	return nil
+}
+
+// UnmarshalJSON implements custom unmarshaling to support both 'resource' (v0.2)
+// and legacy 'uri' (v0.1) source field names in JSON.
+func (s *Source) UnmarshalJSON(data []byte) error {
+	type sourceAlias Source
+	var raw struct {
+		sourceAlias
+		URI string `json:"uri,omitempty"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*s = Source(raw.sourceAlias)
+	if s.Resource == "" && raw.URI != "" {
+		s.Resource = raw.URI
+	}
+	return nil
 }
 
 // ActorInfo records details about an actor (human or machine) in concept creation or verification.

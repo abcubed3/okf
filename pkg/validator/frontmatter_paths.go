@@ -12,6 +12,52 @@ import (
 	"github.com/abcubed3/okf/pkg/internal/links"
 )
 
+var knownPathExtensions = map[string]bool{
+	".c":        true,
+	".cc":       true,
+	".cpp":      true,
+	".csv":      true,
+	".go":       true,
+	".gql":      true,
+	".graphql":  true,
+	".h":        true,
+	".hpp":      true,
+	".htm":      true,
+	".html":     true,
+	".java":     true,
+	".js":       true,
+	".json":     true,
+	".markdown": true,
+	".md":       true,
+	".proto":    true,
+	".py":       true,
+	".r":        true,
+	".rb":       true,
+	".rs":       true,
+	".scala":    true,
+	".sh":       true,
+	".sql":      true,
+	".toml":     true,
+	".ts":       true,
+	".tsv":      true,
+	".txt":      true,
+	".xml":      true,
+	".yaml":     true,
+	".yml":      true,
+}
+
+func isExplicitPath(target string) bool {
+	clean := strings.TrimSpace(strings.ReplaceAll(target, "\\", "/"))
+	if strings.HasPrefix(clean, "/") ||
+		strings.HasPrefix(clean, "./") ||
+		strings.HasPrefix(clean, "../") ||
+		strings.Contains(clean, "/") {
+		return true
+	}
+	ext := strings.ToLower(path.Ext(clean))
+	return knownPathExtensions[ext]
+}
+
 func validateFrontmatterPaths(c *bundle.Concept, b *bundle.Bundle) []Issue {
 	var issues []Issue
 	check := func(field, value string, pathRequired bool) {
@@ -21,7 +67,7 @@ func validateFrontmatterPaths(c *bundle.Concept, b *bundle.Bundle) []Issue {
 		if !pathRequired && !looksLikeBundlePath(value) {
 			return
 		}
-		issues = append(issues, validateFrontmatterPath(c, b, field, value)...)
+		issues = append(issues, validateFrontmatterPath(c, b, field, value, pathRequired)...)
 	}
 
 	check("resource", c.Frontmatter.Resource, false)
@@ -43,7 +89,7 @@ func validateFrontmatterPaths(c *bundle.Concept, b *bundle.Bundle) []Issue {
 
 // validateFrontmatterPath resolves a frontmatter path against its concept and bundle,
 // then warns when the target is missing, is not a file, or escapes the bundle root.
-func validateFrontmatterPath(c *bundle.Concept, b *bundle.Bundle, field, value string) []Issue {
+func validateFrontmatterPath(c *bundle.Concept, b *bundle.Bundle, field, value string, pathRequired bool) []Issue {
 	target := strings.TrimSpace(strings.SplitN(value, "#", 2)[0])
 	target = strings.ReplaceAll(target, "\\", "/")
 	if target == "" {
@@ -84,6 +130,12 @@ func validateFrontmatterPath(c *bundle.Concept, b *bundle.Bundle, field, value s
 
 	info, err := os.Stat(targetPath)
 	if err != nil {
+		// If the field is not strictly required to be a path (e.g. 'resource' or 'sources[].resource')
+		// and the value does not have explicit path indicators (no slashes and not a recognized file extension),
+		// treat it as an opaque asset/table identifier (e.g. 'analytics.mrr_daily') rather than a broken file path.
+		if !pathRequired && !isExplicitPath(target) {
+			return nil
+		}
 		return []Issue{frontmatterPathIssue(c, fmt.Sprintf("broken frontmatter path: field '%s' references %q, which could not be resolved: %v", field, value, err))}
 	}
 	if info.IsDir() {
