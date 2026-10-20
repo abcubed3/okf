@@ -1,6 +1,8 @@
 package bundle_test
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -295,3 +297,108 @@ func TestConceptIsStale(t *testing.T) {
 		t.Error("expected concept with no stale_after to not be stale")
 	}
 }
+
+func TestSourceBackwardCompatibility(t *testing.T) {
+	t.Run("YAML with legacy uri field", func(t *testing.T) {
+		input := `
+sources:
+  - uri: "https://stripe.com/docs/billing"
+    title: "Stripe Docs"
+    author: "Stripe Team"
+`
+		var fm bundle.Frontmatter
+		if err := yaml.Unmarshal([]byte(input), &fm); err != nil {
+			t.Fatalf("failed to unmarshal legacy uri: %v", err)
+		}
+		if len(fm.Sources) != 1 {
+			t.Fatalf("expected 1 source, got %d", len(fm.Sources))
+		}
+		src := fm.Sources[0]
+		if src.Resource != "https://stripe.com/docs/billing" {
+			t.Errorf("expected Resource to be populated from uri, got %q", src.Resource)
+		}
+		if src.URI() != "https://stripe.com/docs/billing" {
+			t.Errorf("expected URI() to return %q, got %q", "https://stripe.com/docs/billing", src.URI())
+		}
+		if src.Title != "Stripe Docs" || src.Author != "Stripe Team" {
+			t.Errorf("expected title and author to be preserved, got %+v", src)
+		}
+	})
+
+	t.Run("YAML with spec resource field", func(t *testing.T) {
+		input := `
+sources:
+  - resource: "https://stripe.com/docs/v0_2"
+    title: "Stripe Spec Docs"
+`
+		var fm bundle.Frontmatter
+		if err := yaml.Unmarshal([]byte(input), &fm); err != nil {
+			t.Fatalf("failed to unmarshal resource: %v", err)
+		}
+		if len(fm.Sources) != 1 {
+			t.Fatalf("expected 1 source, got %d", len(fm.Sources))
+		}
+		src := fm.Sources[0]
+		if src.Resource != "https://stripe.com/docs/v0_2" {
+			t.Errorf("expected Resource %q, got %q", "https://stripe.com/docs/v0_2", src.Resource)
+		}
+		if src.URI() != "https://stripe.com/docs/v0_2" {
+			t.Errorf("expected URI() %q, got %q", "https://stripe.com/docs/v0_2", src.URI())
+		}
+	})
+
+	t.Run("YAML resource takes precedence over uri", func(t *testing.T) {
+		input := `
+sources:
+  - resource: "https://canonical.com/spec"
+    uri: "https://legacy.com/old"
+`
+		var fm bundle.Frontmatter
+		if err := yaml.Unmarshal([]byte(input), &fm); err != nil {
+			t.Fatalf("failed to unmarshal: %v", err)
+		}
+		src := fm.Sources[0]
+		if src.Resource != "https://canonical.com/spec" {
+			t.Errorf("expected Resource %q to take precedence, got %q", "https://canonical.com/spec", src.Resource)
+		}
+	})
+
+	t.Run("YAML marshal emits resource and not uri", func(t *testing.T) {
+		src := bundle.Source{
+			Resource: "https://example.com/asset",
+			Title:    "Example Asset",
+		}
+		out, err := yaml.Marshal(src)
+		if err != nil {
+			t.Fatalf("failed to marshal Source: %v", err)
+		}
+		strOut := string(out)
+		if !strings.Contains(strOut, "resource: https://example.com/asset") {
+			t.Errorf("expected marshal output to contain 'resource: ...', got:\n%s", strOut)
+		}
+		if strings.Contains(strOut, "uri:") {
+			t.Errorf("expected marshal output to NOT contain 'uri:', got:\n%s", strOut)
+		}
+	})
+
+	t.Run("JSON unmarshal supports legacy uri and resource", func(t *testing.T) {
+		jsonLegacy := `{"uri":"https://stripe.com/json","title":"Stripe JSON"}`
+		var src1 bundle.Source
+		if err := json.Unmarshal([]byte(jsonLegacy), &src1); err != nil {
+			t.Fatalf("failed to unmarshal JSON with uri: %v", err)
+		}
+		if src1.Resource != "https://stripe.com/json" || src1.URI() != "https://stripe.com/json" {
+			t.Errorf("expected Resource to be populated from JSON uri, got %q", src1.Resource)
+		}
+
+		jsonSpec := `{"resource":"https://stripe.com/spec","title":"Stripe Spec"}`
+		var src2 bundle.Source
+		if err := json.Unmarshal([]byte(jsonSpec), &src2); err != nil {
+			t.Fatalf("failed to unmarshal JSON with resource: %v", err)
+		}
+		if src2.Resource != "https://stripe.com/spec" || src2.URI() != "https://stripe.com/spec" {
+			t.Errorf("expected Resource %q, got %q", "https://stripe.com/spec", src2.Resource)
+		}
+	})
+}
+

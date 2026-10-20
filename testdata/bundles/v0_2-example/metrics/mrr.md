@@ -13,7 +13,7 @@ status: "stable"
 stale_after: "2027-01-01T00:00:00Z"
 
 sources:
-  - uri: "https://stripe.com/docs/billing/subscriptions"
+  - resource: "https://stripe.com/docs/billing/subscriptions"
     title: "Stripe Subscription Lifecycle Specs"
     author: "Billing Architecture Team"
     usage_count: 142
@@ -33,4 +33,5 @@ verified:
 MRR measures predictable subscription revenue components.
 
 ## Related Concepts
+
 - [MRR Calculation Query](../attestations/mrr_query.md)

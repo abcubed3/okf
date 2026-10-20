@@ -2,6 +2,7 @@
 package bundle
 
 import (
+	"encoding/json"
 	"strings"
 	"time"
 
@@ -15,10 +16,20 @@ const (
 	TrustTierHumanReviewed    = "human-reviewed"
 )
 
+// ConceptLifecycleStatus represents a concept's lifecycle state.
+type ConceptLifecycleStatus string
+
+const (
+	// ConceptLifecycleStable is the default lifecycle status for OKF v0.2 concepts.
+	ConceptLifecycleStable     ConceptLifecycleStatus = "stable"
+	ConceptLifecycleDraft      ConceptLifecycleStatus = "draft"
+	ConceptLifecycleDeprecated ConceptLifecycleStatus = "deprecated"
+)
+
 // Source represents provenance information for an OKF v0.2 concept document.
 type Source struct {
-	// URI is the target web link or file path of the source document.
-	URI string `yaml:"uri,omitempty" json:"uri,omitempty"`
+	// Resource is the URI or bundle-relative path of the source material.
+	Resource string `yaml:"resource,omitempty" json:"resource,omitempty"`
 	// Title is the human-readable description of the source material.
 	Title string `yaml:"title,omitempty" json:"title,omitempty"`
 	// Author is the creator of the source content.
@@ -27,6 +38,49 @@ type Source struct {
 	UsageCount int `yaml:"usage_count,omitempty" json:"usage_count,omitempty"`
 	// LastModified is the RFC3339 formatted modification date of the source.
 	LastModified string `yaml:"last_modified,omitempty" json:"last_modified,omitempty"`
+}
+
+// URI returns the source resource identifier for backward compatibility with OKF v0.1.
+//
+// Deprecated: Use Resource instead per OKF Spec v0.2 §5.1.
+func (s Source) URI() string {
+	return s.Resource
+}
+
+// UnmarshalYAML implements custom unmarshaling to support both 'resource' (v0.2)
+// and legacy 'uri' (v0.1) source field names.
+func (s *Source) UnmarshalYAML(value *yaml.Node) error {
+	type sourceAlias Source
+	var raw struct {
+		sourceAlias `yaml:",inline"`
+		URI         string `yaml:"uri,omitempty"`
+	}
+	if err := value.Decode(&raw); err != nil {
+		return err
+	}
+	*s = Source(raw.sourceAlias)
+	if s.Resource == "" && raw.URI != "" {
+		s.Resource = raw.URI
+	}
+	return nil
+}
+
+// UnmarshalJSON implements custom unmarshaling to support both 'resource' (v0.2)
+// and legacy 'uri' (v0.1) source field names in JSON.
+func (s *Source) UnmarshalJSON(data []byte) error {
+	type sourceAlias Source
+	var raw struct {
+		sourceAlias
+		URI string `json:"uri,omitempty"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*s = Source(raw.sourceAlias)
+	if s.Resource == "" && raw.URI != "" {
+		s.Resource = raw.URI
+	}
+	return nil
 }
 
 // ActorInfo records details about an actor (human or machine) in concept creation or verification.
@@ -103,6 +157,27 @@ type Attestation struct {
 	Attester string `yaml:"attester,omitempty" json:"attester,omitempty"`
 }
 
+// Executor describes how an attested computation is run.
+type Executor struct {
+	// Resource identifies run instructions or code.
+	Resource string `yaml:"resource,omitempty" json:"resource,omitempty"`
+	// Receipt lists the evidence returned by a run.
+	Receipt []string `yaml:"receipt,omitempty" json:"receipt,omitempty"`
+}
+
+// Attester describes the deterministic check for an attested computation.
+type Attester struct {
+	// Resource identifies the code that checks an execution receipt.
+	Resource string `yaml:"resource,omitempty" json:"resource,omitempty"`
+}
+
+// Parameter describes a typed input accepted by a computation.
+type Parameter struct {
+	Name     string `yaml:"name" json:"name"`
+	Type     string `yaml:"type" json:"type"`
+	Required bool   `yaml:"required" json:"required"`
+}
+
 // Frontmatter represents the metadata block of an OKF concept document.
 type Frontmatter struct {
 	// Type specifies the category of the concept (e.g., "PostgreSQL Table", "API Endpoint", "Attestation").
@@ -124,6 +199,16 @@ type Frontmatter struct {
 
 	// Sources records the provenance and origin materials for this concept.
 	Sources []Source `yaml:"sources,omitempty"`
+	// Runtime identifies the environment used to run an attested computation.
+	Runtime string `yaml:"runtime,omitempty"`
+	// Parameters lists the typed inputs accepted by an attested computation.
+	Parameters []Parameter `yaml:"parameters,omitempty"`
+	// Computation is an optional path to the computation file.
+	Computation string `yaml:"computation,omitempty"`
+	// Executor describes how an attested computation is run.
+	Executor *Executor `yaml:"executor,omitempty"`
+	// Attester describes the deterministic check for an attested computation.
+	Attester *Attester `yaml:"attester,omitempty"`
 	// Generated records creation metadata (actor and timestamp).
 	Generated *ActorInfo `yaml:"generated,omitempty"`
 	// Verified lists independent confirmations of accuracy (human or automated).
@@ -132,7 +217,7 @@ type Frontmatter struct {
 	// StaleAfter defines an absolute RFC3339 expiration date after which re-verification is required.
 	StaleAfter string `yaml:"stale_after,omitempty"`
 	// Status specifies the lifecycle state ("draft", "stable", "deprecated").
-	Status string `yaml:"status,omitempty"`
+	Status ConceptLifecycleStatus `yaml:"status,omitempty"`
 	// Attestation defines sanctioned computation properties for Attestation concepts.
 	Attestation *Attestation `yaml:"attestation,omitempty"`
 
