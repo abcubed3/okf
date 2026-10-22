@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-//go:embed *
+//go:embed all:okf
 var skillFS embed.FS
 
 type Skill string

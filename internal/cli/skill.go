@@ -159,6 +159,6 @@ func runSkillInstall(args []string) error {
 	}
 
 	fmt.Printf("Successfully installed the OKF Agent Skill into: %s 🎉\n", dest)
-	fmt.Printf("AI agent harness can now discover and use the OKF skill with the `/okf` command!\n")
+	fmt.Printf("AI coding agents and harnesses can now discover and use the OKF skill!\n")
 	return nil
 }

@@ -182,4 +182,14 @@ func TestInstallOfficialSkill(t *testing.T) {
 	if _, err := os.Stat(refFile); os.IsNotExist(err) {
 		t.Errorf("Expected reference file spec-v02.md to exist")
 	}
+
+	cheatFile := filepath.Join(targetDir, "references", "cli-cheatsheet.md")
+	if _, err := os.Stat(cheatFile); os.IsNotExist(err) {
+		t.Errorf("Expected reference file cli-cheatsheet.md to exist")
+	}
+
+	exampleFile := filepath.Join(targetDir, "examples", "attestations", "mrr_query.md")
+	if _, err := os.Stat(exampleFile); os.IsNotExist(err) {
+		t.Errorf("Expected example file attestations/mrr_query.md to exist")
+	}
 }

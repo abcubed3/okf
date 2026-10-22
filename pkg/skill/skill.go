@@ -267,7 +267,9 @@ func InstallOfficialSkill(opts InstallOptions) (string, error) {
 		return "", fmt.Errorf("failed to resolve absolute path for %s: %w", destDir, err)
 	}
 
-	err = skills.CopySkill(skills.OKF, absDest)
+	if err := skills.CopySkill(skills.OKF, absDest); err != nil {
+		return "", fmt.Errorf("failed to copy embedded skill: %w", err)
+	}
 
-	return absDest, err
+	return absDest, nil
 }
