@@ -142,7 +142,7 @@ func runSkillExport(args []string) error {
 func runSkillInstall(args []string) error {
 	fs := flag.NewFlagSet("skill install", flag.ContinueOnError)
 	dir := fs.String("dir", "", "Explicit target directory to install skill")
-	platform := fs.String("platform", "antigravity", "Target agent platform: 'antigravity', 'claude', or 'cursor'")
+	platform := fs.String("platform", "agents", "Target agent platform: 'agents', 'antigravity', 'claude', or 'cursor'")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -158,7 +158,7 @@ func runSkillInstall(args []string) error {
 		return fmt.Errorf("failed to install official OKF skill: %w", err)
 	}
 
-	fmt.Printf("Successfully installed official OKF Agent Skill into: %s 🎉\n", dest)
-	fmt.Printf("AI coding agents (Antigravity, Claude, Cursor) can now discover and use OKF tools!\n")
+	fmt.Printf("Successfully installed the OKF Agent Skill into: %s 🎉\n", dest)
+	fmt.Printf("AI coding agents and harnesses can now discover and use the OKF skill!\n")
 	return nil
 }

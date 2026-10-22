@@ -18,13 +18,13 @@ func createTestBundle() *bundle.Bundle {
 		ID:   "metrics/mrr",
 		Path: "/test/bundle/metrics/mrr.md",
 		Frontmatter: bundle.Frontmatter{
-			Type:        "Metric",
-			Title:       "Monthly Recurring Revenue",
-			Desc:        "Normalized monthly revenue from active customer subscriptions.",
-			Resource:    "analytics.mrr_daily",
-			Tags:        []string{"finance", "revenue"},
-			Status:      bundle.ConceptLifecycleStable,
-			StaleAfter:  "2027-01-01T00:00:00Z",
+			Type:       "Metric",
+			Title:      "Monthly Recurring Revenue",
+			Desc:       "Normalized monthly revenue from active customer subscriptions.",
+			Resource:   "analytics.mrr_daily",
+			Tags:       []string{"finance", "revenue"},
+			Status:     bundle.ConceptLifecycleStable,
+			StaleAfter: "2027-01-01T00:00:00Z",
 			Verified: []bundle.ActorInfo{
 				{By: "human:alice@company.com", At: "2026-08-01T12:00:00Z"},
 			},
@@ -37,11 +37,11 @@ func createTestBundle() *bundle.Bundle {
 		ID:   "attestations/mrr_query",
 		Path: "/test/bundle/attestations/mrr_query.md",
 		Frontmatter: bundle.Frontmatter{
-			Type:        "Attestation",
-			Title:       "Sanctioned MRR Calculation Query",
-			Desc:        "Audited query for MRR calculation.",
-			Tags:        []string{"finance", "sql"},
-			Status:      bundle.ConceptLifecycleStable,
+			Type:   "Attestation",
+			Title:  "Sanctioned MRR Calculation Query",
+			Desc:   "Audited query for MRR calculation.",
+			Tags:   []string{"finance", "sql"},
+			Status: bundle.ConceptLifecycleStable,
 			Attestation: &bundle.Attestation{
 				Query:    "SELECT SUM(amount) AS total_mrr FROM subscriptions WHERE status = 'active';",
 				Executor: "BigQuery",
@@ -59,11 +59,11 @@ func createTestBundle() *bundle.Bundle {
 		ID:   "tables/users",
 		Path: "/test/bundle/tables/users.md",
 		Frontmatter: bundle.Frontmatter{
-			Type:        "PostgreSQL Table",
-			Title:       "Users Table",
-			Desc:        "User account entities.",
-			Tags:        []string{"core", "users"},
-			Status:      bundle.ConceptLifecycleStable,
+			Type:   "PostgreSQL Table",
+			Title:  "Users Table",
+			Desc:   "User account entities.",
+			Tags:   []string{"core", "users"},
+			Status: bundle.ConceptLifecycleStable,
 		},
 		Body: "| id | email | status |",
 	}
@@ -181,5 +181,15 @@ func TestInstallOfficialSkill(t *testing.T) {
 	refFile := filepath.Join(targetDir, "references", "spec-v02.md")
 	if _, err := os.Stat(refFile); os.IsNotExist(err) {
 		t.Errorf("Expected reference file spec-v02.md to exist")
+	}
+
+	cheatFile := filepath.Join(targetDir, "references", "cli-cheatsheet.md")
+	if _, err := os.Stat(cheatFile); os.IsNotExist(err) {
+		t.Errorf("Expected reference file cli-cheatsheet.md to exist")
+	}
+
+	exampleFile := filepath.Join(targetDir, "examples", "attestations", "mrr_query.md")
+	if _, err := os.Stat(exampleFile); os.IsNotExist(err) {
+		t.Errorf("Expected example file attestations/mrr_query.md to exist")
 	}
 }

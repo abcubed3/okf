@@ -4,13 +4,13 @@ package skill
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/abcubed3/okf/pkg/bundle"
+	"github.com/abcubed3/okf/skills"
 	"gopkg.in/yaml.v3"
 )
 
@@ -236,7 +236,7 @@ func filterConcepts(concepts map[string]*bundle.Concept, tags, types []string) m
 type InstallOptions struct {
 	// TargetDir is the explicit root or skill directory to install to.
 	TargetDir string
-	// Platform specifies the target agent system ("antigravity", "claude", "cursor", "workspace").
+	// Platform specifies the target agent harness ("antigravity", "claude", "cursor", "workspace").
 	Platform string
 }
 
@@ -267,21 +267,9 @@ func InstallOfficialSkill(opts InstallOptions) (string, error) {
 		return "", fmt.Errorf("failed to resolve absolute path for %s: %w", destDir, err)
 	}
 
-	if err := os.MkdirAll(absDest, 0755); err != nil {
-		return "", fmt.Errorf("failed to create skill directory: %w", err)
+	if err := skills.CopySkill(skills.OKF, absDest); err != nil {
+		return "", fmt.Errorf("failed to copy embedded skill: %w", err)
 	}
-
-	// Write SKILL.md
-	skillFile := filepath.Join(absDest, "SKILL.md")
-	if err := os.WriteFile(skillFile, []byte(OfficialSkillMarkdown), 0644); err != nil {
-		return "", fmt.Errorf("failed to write %s: %w", skillFile, err)
-	}
-
-	// Write reference spec
-	refDir := filepath.Join(absDest, "references")
-	_ = os.MkdirAll(refDir, 0755)
-	_ = os.WriteFile(filepath.Join(refDir, "spec-v02.md"), []byte(OfficialSpecV02Markdown), 0644)
-	_ = os.WriteFile(filepath.Join(refDir, "cli-cheatsheet.md"), []byte(OfficialCLICheatsheetMarkdown), 0644)
 
 	return absDest, nil
 }

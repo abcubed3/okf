@@ -729,17 +729,16 @@ func (s *Server) handleAskKnowledgeBase(ctx context.Context, req *sdk.CallToolRe
 	}
 
 	return &sdk.CallToolResult{
-		Content: []sdk.Content{
-			&sdk.TextContent{
-				Text: res.Answer,
+			Content: []sdk.Content{
+				&sdk.TextContent{
+					Text: res.Answer,
+				},
 			},
-		},
-	}, AskKnowledgeBaseResult{
-		Query:              res.Query,
-		Answer:             res.Answer,
-		SeedConcept:        res.SeedConcept,
-		ReferencedConcepts: res.ReferencedConcepts,
-		Attestations:       res.Attestations,
-	}, nil
+		}, AskKnowledgeBaseResult{
+			Query:              res.Query,
+			Answer:             res.Answer,
+			SeedConcept:        res.SeedConcept,
+			ReferencedConcepts: res.ReferencedConcepts,
+			Attestations:       res.Attestations,
+		}, nil
 }
-
