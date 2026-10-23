@@ -1,8 +1,9 @@
-# GoReleaser stages the platform-specific release binary as `okf` in this build context.
+# GoReleaser stages platform-specific binaries in ${TARGETPLATFORM}/okf
 # Keep this file focused on packaging that binary; Go compilation happens in GoReleaser.
 FROM gcr.io/distroless/static-debian13:nonroot
 
-COPY okf /usr/local/bin/okf
+ARG TARGETPLATFORM
+COPY ${TARGETPLATFORM}/okf /usr/local/bin/okf
 
 WORKDIR /bundle
 

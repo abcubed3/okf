@@ -30,6 +30,7 @@ dockers_v2:
       - ghcr.io/abcubed3/okf
     tags:
       - "{{ .Tag }}"
+      - "{{ if not .Prerelease }}latest{{ end }}"
     dockerfile: Containerfile
     platforms:
       - linux/amd64

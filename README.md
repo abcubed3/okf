@@ -196,7 +196,7 @@ docker run --rm -v "$(pwd):/bundle:ro" ghcr.io/abcubed3/okf:latest lint /bundle
 Run MCP over HTTP with Docker Compose. Save this as `compose.yaml` and change
 `my_bundle_location` to the path to your bundle:
 
-```bash
+```yaml
 services:
   okf-kb:
     image: ghcr.io/abcubed3/okf:latest
