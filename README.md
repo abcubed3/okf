@@ -18,6 +18,7 @@
 
 > [!TIP]
 > **🚀 What's New in Release v1.0.4:**
+>
 > - **AI Agent Skills Engine (`okf skill`)**: Compile any OKF knowledge bundle into a production-grade Agent Skill (`SKILL.md`) for Google Antigravity, Claude Code, Cursor, Windsurf, and Codex. Includes `okf skill install` for one-command installation of the official OKF skill into developer workspaces (`.agents/skills/okf`).
 > - **Grounded AI Q&A (`okf ask`)**: Natural language question answering directly from the CLI backed by deterministic BFS context assembly and Gemini generative AI, citing verified concept files and verbatim attested computations.
 > - **MCP Server AI Tools**: Expanded the Model Context Protocol server with `export_agent_skill` and `ask_knowledge_base` tools.
@@ -173,6 +174,44 @@ go install github.com/abcubed3/okf@latest
 ```
 
 Ensure your `GOBIN` directory (typically `$HOME/go/bin` or `$GOPATH/bin`) is in your system's `PATH`.
+
+#### Option D: Docker
+
+GoReleaser publishes a multi-platform image to GitHub Container Registry for
+each release, using the same Linux binaries as the downloadable release
+archives. The runtime is a minimal, non-root Debian 13 distroless image, and
+the entrypoint is `okf`, so Docker arguments are passed to the CLI as
+subcommands.
+
+```bash
+docker pull ghcr.io/abcubed3/okf:latest
+```
+
+Lint a bundle mounted from the current directory:
+
+```bash
+docker run --rm -v "$(pwd):/bundle:ro" ghcr.io/abcubed3/okf:latest lint /bundle
+```
+
+Run MCP over HTTP with Docker Compose. Save this as `compose.yaml` and change
+`my_bundle_location` to the path to your bundle:
+
+```yaml
+services:
+  okf-kb:
+    image: ghcr.io/abcubed3/okf:latest
+    command: ["mcp", "--bundle", "/bundle", "--transport", "http", "--port", "8080"]
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./my_bundle_location:/bundle:ro
+```
+
+Then run it as a background task
+
+```bash
+docker compose up -d
+```
 
 ---
 
@@ -513,6 +552,7 @@ connectors:
 Bridge organizational knowledge directly into autonomous coding agents (Google Antigravity, Claude Code, Cursor, Windsurf, GitHub Copilot).
 
 #### A. Exporting a Bundle to an Agent Skill (`okf skill export`)
+
 Compiles an OKF bundle or filtered tag subset into an authoritative `SKILL.md` file containing verified schema dictionaries, business metric rules, and sanctioned computation queries:
 
 ```bash
@@ -527,6 +567,7 @@ okf export skill --bundle ./knowledge --output ./SKILL.md
 ```
 
 #### B. Installing the Official OKF Skill (`okf skill install`)
+
 Installs the official OKF Agent Skill into your project or IDE configuration:
 
 ```bash

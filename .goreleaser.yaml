@@ -25,6 +25,29 @@ builds:
     ldflags:
       - -s -w -X main.Version={{.Version}} -X main.Commit={{.Commit}} -X main.Date={{.Date}}
 
+dockers_v2:
+  - images:
+      - ghcr.io/abcubed3/okf
+    tags:
+      - "{{ .Tag }}"
+      - "{{ if not .Prerelease }}latest{{ end }}"
+    dockerfile: Containerfile
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    annotations:
+      "org.opencontainers.image.ref.name": "{{ .Tag }}"
+      "org.opencontainers.image.version": "{{ .Version }}"
+      "org.opencontainers.image.title": "{{ .ProjectName }}"
+      "org.opencontainers.image.description": "Open Knowledge Format CLI for validating, managing, and serving knowledge bundles."
+      "org.opencontainers.image.authors": "abcubed3"
+      "org.opencontainers.image.created": "{{ .Date }}"
+      "org.opencontainers.image.revision": "{{ .FullCommit }}"
+      "org.opencontainers.image.source": "{{ .GitURL }}"
+      "org.opencontainers.image.url": "https://okfgo.dev"
+      "org.opencontainers.image.documentation": "https://github.com/abcubed3/okf#readme"
+      "org.opencontainers.image.licenses": "Apache-2.0"
+
 archives:
   - formats:
       - tar.gz
@@ -44,5 +67,5 @@ changelog:
   sort: asc
   filters:
     exclude:
-      - '^docs:'
-      - '^test:'
+      - "^docs:"
+      - "^test:"
