@@ -265,8 +265,8 @@ Recognized revenue for a fiscal year, computed by
 ## 🛠️ CLI Quick Reference
 
 Run commands from the bundle root or pass `--bundle <path>` where supported.
-See the [CLI reference](./references/cli-cheatsheet.md) for installation and
-all commands and flags.
+If `okf` is unavailable, see the [CLI reference](./references/cli-cheatsheet.md)
+for installation options and common commands.
 
 ### Validate
 
