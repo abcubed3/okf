@@ -260,8 +260,6 @@ Recognized revenue for a fiscal year, computed by
 
 ---
 
----
-
 ## 🛠️ CLI Quick Reference
 
 Run commands from the bundle root or pass `--bundle <path>` where supported.

@@ -21,10 +21,12 @@ func RunLint(args []string) error {
 	bundlePath := "."
 	host := "http://localhost:8080"
 	apiKey := ""
+	strict := false
 
 	fs := flag.NewFlagSet("lint", flag.ContinueOnError)
 	fs.StringVar(&host, "host", host, "OKF Hub host URL for remote resolution")
 	fs.StringVar(&apiKey, "api-key", "", "OKF Hub API Key for remote resolution")
+	fs.BoolVar(&strict, "strict", false, "Treat validation warnings as errors")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -110,7 +112,13 @@ func RunLint(args []string) error {
 		fmt.Println("Validation complete: OKF bundle is perfectly valid! 🎉")
 	}
 
-	if errorsCount > 0 {
+	if errorsCount > 0 || (strict && warningsCount > 0) {
+		if strict && warningsCount > 0 && errorsCount == 0 {
+			return fmt.Errorf("validation failed with %d warnings (strict mode)", warningsCount)
+		}
+		if strict && warningsCount > 0 {
+			return fmt.Errorf("validation failed with %d errors and %d warnings (strict mode)", errorsCount, warningsCount)
+		}
 		return fmt.Errorf("validation failed with %d errors", errorsCount)
 	}
 	return nil
