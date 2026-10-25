@@ -9,21 +9,23 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/abcubed3/okf/releases/tag/v1.0.4"><img src="https://img.shields.io/badge/release-v1.0.4-blue.svg" alt="Release v1.0.4" /></a>
+  <a href="https://github.com/abcubed3/okf/releases/tag/v1.0.9"><img src="https://img.shields.io/badge/release-v1.0.9-blue.svg" alt="Release v1.0.9" /></a>
   <a href="https://github.com/GoogleCloudPlatform/knowledge-catalog"><img src="https://img.shields.io/badge/OKF%20Spec-v0.2-green.svg" alt="OKF Spec v0.2" /></a>
+  <a href="https://ghcr.io/abcubed3/okf"><img src="https://img.shields.io/badge/container-ghcr.io-blue.svg" alt="Docker Container" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License" /></a>
 </p>
 
 ---
 
 > [!TIP]
-> **🚀 What's New in Release v1.0.4:**
+> **🚀 Highlights & Recent Capabilities (v1.0.x):**
 >
-> - **AI Agent Skills Engine (`okf skill`)**: Compile any OKF knowledge bundle into a production-grade Agent Skill (`SKILL.md`) for Google Antigravity, Claude Code, Cursor, Windsurf, and Codex. Includes `okf skill install` for one-command installation of the official OKF skill into developer workspaces (`.agents/skills/okf`).
+> - **Multi-Arch Container Distribution (`ghcr.io/abcubed3/okf:latest`)**: Official distroless images for Linux AMD64 and ARM64 published to GitHub Container Registry, ready for CI linting and containerized MCP servers.
+> - **Strict Conformance Linter (`okf lint --strict`)**: Elevate soft validation warnings (missing titles/descriptions, unverified links) to hard errors to enforce zero-defect quality gates in CI/CD pipelines.
+> - **Opinionated AI Agent Skill (`okf skill`)**: Compile any knowledge bundle into an active `SKILL.md` or install the official OKF skill (`okf skill install`) with embedded references (`spec-v02.md`, `create-bundle.md`, `cli-cheatsheet.md`) and examples for Antigravity, Claude Code, Cursor, Windsurf, and Codex.
 > - **Grounded AI Q&A (`okf ask`)**: Natural language question answering directly from the CLI backed by deterministic BFS context assembly and Gemini generative AI, citing verified concept files and verbatim attested computations.
-> - **MCP Server AI Tools**: Expanded the Model Context Protocol server with `export_agent_skill` and `ask_knowledge_base` tools.
-> - **Unified Skill Export**: Export to agent skills directly via `okf export skill`.
-> - **Validator Enhancements**: Support for dotted identifiers in resource identifiers and strict OKF v0.2 trust layer verification.
+> - **Attested Computation & Trust Layer (OKF Spec v0.2)**: Native support for provenance (`sources`), freshness (`stale_after`), verification tiers (`generated`/`verified`), and reproducible computations (`type: Attested Computation`).
+> - **Unified CLI Architecture**: All toolchains (`lint`, `harvest`, `assemble`, `mcp`, `skill`, `ask`, `doc`, `lsp`, `sync`, `export`, `diff`, `merge`) consolidated into a single, high-performance `okf` executable.
 
 The **Open Knowledge Format (OKF)** is a vendor-neutral, lightweight specification for structuring organizational knowledge (documentation, runbooks, metrics, database schemas, and API definitions) into machine-readable, human-friendly Markdown files.
 
@@ -39,7 +41,7 @@ The **OKF-go** provides a high-performance suite of utilities to validate bundle
 
 ### 📜 OKF v0.2 Concept Examples
 
-OKF v0.2 introduces a **trust layer** (`status`, `stale_after`, `sources`, `generated`, `verified`) and **Attested Computation** (`type: Attestation`).
+OKF v0.2 introduces a **trust layer** (`status`, `stale_after`, `sources`, `generated`, `verified`) and **Attested Computation** (`type: Attested Computation`).
 
 #### 1. Metric Concept with OKF v0.2 Trust Signals
 
@@ -84,45 +86,65 @@ MRR measures the predictable and recurring revenue components of a subscription 
 
 ```markdown
 ---
-type: "Attestation"
+type: "Attested Computation"
 title: "Sanctioned MRR Calculation Query"
 description: "Audited and attester-approved BigQuery SQL for computing MRR."
 resource: "bigquery.analytics.mrr_query"
+tags:
+  - "finance"
+  - "revenue"
+  - "kpi"
 status: "stable"
-
-attestation:
-  query: |
-    SELECT
-      DATE_TRUNC(created_at, MONTH) AS revenue_month,
-      SUM(amount) AS total_mrr
-    FROM `my-project.analytics.subscriptions`
-    WHERE status = 'active'
-    GROUP BY 1
-  executor: "BigQuery / SQL-2024"
-  attester: "head-of-finance@company.com"
+runtime: "bigquery"
+parameters:
+  - name: "year"
+    type: "integer"
+    required: false
+executor:
+  resource: "references/skills/run-on-bq.md"
+  receipt: ["job_id", "executed_sql", "result"]
+attester:
+  resource: "references/attesters/sql-equality.py"
 
 generated:
   by: "okf-ai-curator"
   at: "2026-08-01T12:00:00Z"
 
 verified:
-  - by: "compliance-officer@company.com"
+  - by: "human:head-of-finance@company.com"
     at: "2026-08-01T12:20:00Z"
-    tier: "certified"
+    tier: "human"
+stale_after: "2027-01-01T00:00:00Z"
+sources:
+  - id: "rev-policy"
+    resource: "https://wiki.acme/finance/revenue-recognition"
+    title: "Revenue Recognition Policy"
 ---
 
-# Sanctioned MRR Calculation Query
+# Computation
 
-This concept defines the sanctioned computation logic for financial reporting.
+    SELECT
+      DATE_TRUNC(created_at, MONTH) AS revenue_month,
+      SUM(amount) AS total_mrr
+    FROM `my-project.analytics.subscriptions`
+    WHERE status = 'active'
+    GROUP BY 1
+
+This concept defines the sanctioned, audit-verified computation logic for financial reporting.[^rev-policy]
+
+[^rev-policy]: Revenue Recognition Policy
 ```
 
+> [!NOTE]
+> OKF v0.2 Attested Computations define a `runtime`, typed `parameters`, `executor`, and `attester`, evaluated via deterministic verification recipes. The CLI also provides backward compatibility for legacy `type: Attestation` concepts.
+
 ---
 
-- **OKF v0.2 Trust Signals & Attestation:** Native support for the v0.2 Trust Layer, including Provenance (`sources`), Trust Verification (`generated`/`verified`), Freshness Expiration (`stale_after`), Lifecycle Status (`status`), and Attested Computation (`type: Attestation`).
-- **Conformance Engine & Linter (`okf lint`):** Validates knowledge bundles for YAML frontmatter correctness, required attributes, broken internal links, and OKF v0.2 trust signal compliance.
+- **OKF v0.2 Trust Signals & Attestation:** Native support for the v0.2 Trust Layer, including Provenance (`sources`), Trust Verification (`generated`/`verified`), Freshness Expiration (`stale_after`), Lifecycle Status (`status`), and Attested Computation (`type: Attested Computation`).
+- **Conformance Engine & Linter (`okf lint`):** Validates knowledge bundles for YAML frontmatter correctness, required attributes, broken internal links, and OKF v0.2 trust signal compliance. Supports `--strict` to fail on soft warnings in CI/CD pipelines.
 - **Metadata Harvesters (`okf harvest`):** Automatically extracts and converts schemas from databases (PostgreSQL, MySQL, Cloud Spanner, BigQuery), OpenAPI specs, Protobuf files, Git repositories, and web pages into OKF concept documents.
 - **Context Assembler (`okf assemble`):** Performs graph-based Breadth-First Search (BFS) starting from a core concept, resolving related concepts within a specified character/token budget to build pruned, high-quality prompt context.
-- **Agent Skills Engine (`okf skill`):** Compile OKF knowledge bundles into production-grade AI Agent Skills (`SKILL.md`) for Antigravity, Claude, Cursor, and Codex, arming autonomous agents with verified schemas, attested SQL queries, and domain rules. Also provides `okf skill install` for deploying the official OKF skill into workspaces.
+- **Agent Skills Engine (`okf skill`):** Compile OKF knowledge bundles into production-grade AI Agent Skills (`SKILL.md`) for Antigravity, Claude, Cursor, and Codex, arming autonomous agents with verified schemas, attested SQL queries, and domain rules. Also provides `okf skill install` for deploying the official OKF skill into workspaces (`.agents/skills/okf`, `.claude/skills/okf`, `.cursor/skills/okf`).
 - **Grounded AI Q&A (`okf ask`):** Query verified organizational knowledge using graph BFS context assembly + Gemini generative AI, providing grounded answers with source concept citations and verbatim attested computation queries.
 - **Model Context Protocol Server (`okf mcp`):** Exposes your knowledge base directly to MCP-compatible AI clients (e.g. Claude Desktop, Cursor, Antigravity) via Stdio or HTTP transport, with built-in tools for search, context assembly, dynamic skill compilation, and grounded Q&A.
 - **Bundle Operations (`okf diff` / `okf merge`):** Compare two OKF bundles for structural and content differences, or merge them to unify distributed knowledge bases.
@@ -277,14 +299,28 @@ okf lint
 
 # Lint a bundle at a specific directory
 okf lint /path/to/my-bundle
+
+# Enforce strict conformance (treat validation warnings as errors, ideal for CI/CD)
+okf lint /path/to/my-bundle --strict
 ```
+
+#### Flags
+
+- `path`: Path to the knowledge bundle directory (default: `.` or current directory).
+- `--strict`: Fails with exit code 1 if any warnings are detected (such as missing recommended fields or orphaned internal links).
+- `--host`: Host URL for remote concept resolution via OKF Hub (default: `http://localhost:8080`).
+- `--api-key`: API key for authenticated OKF Hub requests.
+
+#### Conformance Rules
 
 - **Hard Rules (Fails with Error):**
   - Syntactically valid YAML frontmatter.
   - Presence of the `type` field in frontmatter.
-- **Soft Rules (Emits Warning):**
+  - Required fields for Attested Computations (`runtime`).
+- **Soft Rules (Emits Warning; Fails with `--strict`):**
   - Presence of recommended fields (`title`, `description`).
   - Resolves and verifies all relative Markdown links (e.g. `[Users](users.md)`) to guarantee the graph is fully connected and lacks orphaned links.
+  - Validates trust signals (`sources`, `generated`, `verified`, `stale_after`).
 
 #### CI/CD Automations (GitHub Actions & GitLab CI)
 
@@ -456,12 +492,14 @@ To register the OKF-go MCP server with Claude Desktop, add the server to your `c
 {
   "mcpServers": {
     "okf-knowledge": {
-      "command": "/Users/abcubed3/okf-go/okf",
-      "args": ["mcp", "--bundle", "/Users/abcubed3/okf-go/testdata/sample"]
+      "command": "okf",
+      "args": ["mcp", "--bundle", "/path/to/my-bundle"]
     }
   }
 }
 ```
+
+_Note: If `okf` is not in your system `PATH`, provide the absolute path to your `okf` executable._
 
 #### Exposed MCP Capabilities
 
@@ -568,17 +606,26 @@ okf export skill --bundle ./knowledge --output ./SKILL.md
 
 #### B. Installing the Official OKF Skill (`okf skill install`)
 
-Installs the official OKF Agent Skill into your project or IDE configuration:
+Installs the official, self-contained OKF Agent Skill into your project or IDE configuration:
 
 ```bash
 # Install into default workspace location (.agents/skills/okf)
 okf skill install
 
-# Target specific agent platform
-okf skill install --platform claude   # Installs to .claude/skills/okf
-okf skill install --platform cursor   # Installs to .cursor/skills/okf
-okf skill install --dir /path/to/dir  # Installs to explicit path
+# Target specific agent platforms
+okf skill install --platform antigravity # Installs to .agents/skills/okf
+okf skill install --platform claude      # Installs to .claude/skills/okf
+okf skill install --platform cursor      # Installs to .cursor/skills/okf
+okf skill install --dir /path/to/dir     # Installs to an explicit directory
 ```
+
+The installed skill is packaged directly into the `okf` binary via Go `embed` and deploys a complete agent knowledge system:
+
+- **`SKILL.md`**: Opinionated guidelines for autonomous agents on how to ground claims in evidence, respect trust verification tiers, honor sanctioned computations, and validate edits with `okf lint`.
+- **`references/spec-v02.md`**: The complete OKF Specification v0.2 reference.
+- **`references/create-bundle.md`**: Step-by-step guide for creating, structuring, and indexing new knowledge bundles.
+- **`references/cli-cheatsheet.md`**: Cheatsheet for all `okf` CLI commands and options.
+- **`examples/`**: Working sample concepts for metrics, database schemas, and attested computations.
 
 ---
 
