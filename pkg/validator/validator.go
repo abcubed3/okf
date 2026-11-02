@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -58,6 +60,10 @@ func ValidateBundle(b *bundle.Bundle, opts Options) []Issue {
 	rcache := make(remoteCache)
 	for _, c := range b.Concepts {
 		issues = append(issues, ValidateConcept(c, b, opts, rcache)...)
+	}
+	for _, idx := range b.IndexFiles {
+		issues = append(issues, validateLinks(idx, b, opts, rcache)...)
+		issues = append(issues, validateCitations(idx, b)...)
 	}
 
 	sort.Slice(issues, func(i, j int) bool {
@@ -360,16 +366,17 @@ func validateLinks(c *bundle.Concept, b *bundle.Bundle, opts Options, rcache rem
 		}
 
 		// Resolve logical relative or absolute path inside bundle
+		targetNorm := strings.ReplaceAll(target, "\\", "/")
 		var resolvedRelPath string
-		if strings.HasPrefix(target, "/") {
-			resolvedRelPath = path.Clean(strings.TrimPrefix(target, "/"))
+		if strings.HasPrefix(targetNorm, "/") {
+			resolvedRelPath = path.Clean(strings.TrimPrefix(targetNorm, "/"))
 		} else {
-			currentDir := path.Dir(c.Path)
-			resolvedRelPath = path.Clean(path.Join(currentDir, target))
+			currentDir := path.Dir(filepath.ToSlash(c.Path))
+			resolvedRelPath = path.Clean(path.Join(currentDir, targetNorm))
 		}
 
 		// Normalize: check if resolved path goes beyond the root
-		if strings.HasPrefix(resolvedRelPath, "..") {
+		if resolvedRelPath == ".." || strings.HasPrefix(resolvedRelPath, "../") {
 			issues = append(issues, Issue{
 				ConceptID: c.ID,
 				Path:      c.Path,
@@ -382,8 +389,8 @@ func validateLinks(c *bundle.Concept, b *bundle.Bundle, opts Options, rcache rem
 		// Convert to Concept ID by removing the extension (.md)
 		targetConceptID := strings.TrimSuffix(resolvedRelPath, ".md")
 
-		// Check if the concept exists in the bundle
-		if _, exists := b.GetConcept(targetConceptID); !exists {
+		// Check if the concept or reserved/bundle file exists in the bundle
+		if !bundleTargetExists(b, resolvedRelPath) {
 			issues = append(issues, Issue{
 				ConceptID: c.ID,
 				Path:      c.Path,
@@ -442,16 +449,17 @@ func validateCitations(c *bundle.Concept, b *bundle.Bundle) []Issue {
 		}
 
 		// Resolve path
+		targetNorm := strings.ReplaceAll(target, "\\", "/")
 		var resolvedRelPath string
-		if strings.HasPrefix(target, "/") {
-			resolvedRelPath = path.Clean(strings.TrimPrefix(target, "/"))
+		if strings.HasPrefix(targetNorm, "/") {
+			resolvedRelPath = path.Clean(strings.TrimPrefix(targetNorm, "/"))
 		} else {
-			currentDir := path.Dir(c.Path)
-			resolvedRelPath = path.Clean(path.Join(currentDir, target))
+			currentDir := path.Dir(filepath.ToSlash(c.Path))
+			resolvedRelPath = path.Clean(path.Join(currentDir, targetNorm))
 		}
 
 		// Check if resolved path goes beyond root
-		if strings.HasPrefix(resolvedRelPath, "..") {
+		if resolvedRelPath == ".." || strings.HasPrefix(resolvedRelPath, "../") {
 			issues = append(issues, Issue{
 				ConceptID: c.ID,
 				Path:      c.Path,
@@ -465,7 +473,7 @@ func validateCitations(c *bundle.Concept, b *bundle.Bundle) []Issue {
 		targetConceptID := strings.TrimSuffix(resolvedRelPath, ".md")
 
 		// Check existence
-		if _, exists := b.GetConcept(targetConceptID); !exists {
+		if !bundleTargetExists(b, resolvedRelPath) {
 			issues = append(issues, Issue{
 				ConceptID: c.ID,
 				Path:      c.Path,
@@ -476,4 +484,70 @@ func validateCitations(c *bundle.Concept, b *bundle.Bundle) []Issue {
 	}
 
 	return issues
+}
+
+// bundleTargetExists checks whether a bundle-relative path resolves to a parsed concept,
+// a recorded index.md file, an existing file inside the bundle (such as index.md, log.md,
+// or a reference file), or a directory containing an index.md file, without escaping the bundle root.
+func bundleTargetExists(b *bundle.Bundle, resolvedRelPath string) bool {
+	if b == nil {
+		return false
+	}
+	if resolvedRelPath == "." || resolvedRelPath == "" {
+		resolvedRelPath = "index.md"
+	}
+
+	targetConceptID := strings.TrimSuffix(resolvedRelPath, ".md")
+	if _, exists := b.GetConcept(targetConceptID); exists {
+		return true
+	}
+
+	if b.IndexFiles != nil {
+		if _, exists := b.IndexFiles[resolvedRelPath]; exists {
+			return true
+		}
+		if _, exists := b.IndexFiles[targetConceptID+".md"]; exists {
+			return true
+		}
+		if _, exists := b.IndexFiles[path.Join(resolvedRelPath, "index.md")]; exists {
+			return true
+		}
+	}
+
+	if strings.TrimSpace(b.Path) == "" {
+		return false
+	}
+
+	bundleRoot, err := filepath.Abs(b.Path)
+	if err != nil {
+		return false
+	}
+	targetPath := filepath.Join(bundleRoot, filepath.FromSlash(resolvedRelPath))
+	rel, err := filepath.Rel(bundleRoot, targetPath)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return false
+	}
+
+	info, err := os.Stat(targetPath)
+	if err != nil {
+		return false
+	}
+	if info.IsDir() {
+		targetPath = filepath.Join(targetPath, "index.md")
+		info, err = os.Stat(targetPath)
+		if err != nil || info.IsDir() {
+			return false
+		}
+	}
+
+	realRoot, err := filepath.EvalSymlinks(bundleRoot)
+	if err != nil {
+		return false
+	}
+	realTarget, err := filepath.EvalSymlinks(targetPath)
+	if err != nil {
+		return false
+	}
+	realRel, err := filepath.Rel(realRoot, realTarget)
+	return err == nil && realRel != ".." && !strings.HasPrefix(realRel, ".."+string(os.PathSeparator))
 }

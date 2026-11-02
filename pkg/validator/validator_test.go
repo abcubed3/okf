@@ -1,10 +1,15 @@
 package validator
 
 import (
+	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/abcubed3/okf/pkg/bundle"
+	"github.com/abcubed3/okf/pkg/parser"
 )
 
 func TestValidateBundle(t *testing.T) {
@@ -130,6 +135,79 @@ Check out this [External Link](https://google.com) which should be ignored.`,
 	}
 	for id := range expectedWarnings {
 		t.Errorf("missing expected warning on concept %q", id)
+	}
+}
+
+func TestValidateBundle_SubdirectoryIndexLinks(t *testing.T) {
+	root := t.TempDir()
+	writeFile := func(relPath, content string) {
+		t.Helper()
+		fullPath := filepath.Join(root, filepath.FromSlash(relPath))
+		if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+			t.Fatalf("mkdir %q: %v", relPath, err)
+		}
+		if err := os.WriteFile(fullPath, []byte(content), 0o644); err != nil {
+			t.Fatalf("write %q: %v", relPath, err)
+		}
+	}
+
+	writeFile("index.md", "---\nokf_version: \"0.2\"\n---\n# Bundle Index\n- [APIs](apis/index.md)\n- [Playbooks](playbooks/database_cleanup.md)\n")
+	writeFile("log.md", "# Change Log\n")
+	writeFile("apis/index.md", "# APIs\n- [Create User](create_user.md)\n")
+	writeFile("apis/create_user.md", "---\ntype: API\ntitle: Create User\ndescription: Creates a user.\n---\n# Create User\n")
+	writeFile("playbooks/database_cleanup.md", `---
+type: Playbook
+title: Database Cleanup Playbook
+description: Cleans up database records.
+---
+
+# Database Cleanup Playbook
+
+Refers to [apis](/apis/index.md), [apis relative](../apis/index.md), [apis dir](/apis/), [root index](/index.md), and [changelog](/log.md).
+Also refers to [missing index](/missing/index.md).
+`)
+
+	b, err := parser.ParseBundle(context.Background(), root)
+	if err != nil {
+		t.Fatalf("ParseBundle failed: %v", err)
+	}
+
+	issues := ValidateBundle(b, Options{})
+	if len(issues) != 1 {
+		t.Fatalf("expected 1 warning (for /missing/index.md), got %d: %+v", len(issues), issues)
+	}
+	if issues[0].ConceptID != "playbooks/database_cleanup" || !strings.Contains(issues[0].Message, "/missing/index.md") {
+		t.Errorf("unexpected issue: %+v", issues[0])
+	}
+}
+
+func TestValidateBundle_IndexFileOutboundLinks(t *testing.T) {
+	root := t.TempDir()
+	writeFile := func(relPath, content string) {
+		t.Helper()
+		fullPath := filepath.Join(root, filepath.FromSlash(relPath))
+		if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+			t.Fatalf("mkdir %q: %v", relPath, err)
+		}
+		if err := os.WriteFile(fullPath, []byte(content), 0o644); err != nil {
+			t.Fatalf("write %q: %v", relPath, err)
+		}
+	}
+
+	writeFile("apis/index.md", "# APIs\n- [Create User](create_user.md)\n- [Deleted API](deleted_api.md)\n")
+	writeFile("apis/create_user.md", "---\ntype: API\ntitle: Create User\ndescription: Creates a user.\n---\n# Create User\n")
+
+	b, err := parser.ParseBundle(context.Background(), root)
+	if err != nil {
+		t.Fatalf("ParseBundle failed: %v", err)
+	}
+
+	issues := ValidateBundle(b, Options{})
+	if len(issues) != 1 {
+		t.Fatalf("expected 1 broken link warning from apis/index.md, got %d: %+v", len(issues), issues)
+	}
+	if filepath.ToSlash(issues[0].Path) != "apis/index.md" || !strings.Contains(issues[0].Message, "deleted_api.md") {
+		t.Errorf("unexpected issue: %+v", issues[0])
 	}
 }
 
