@@ -12,6 +12,8 @@ type Bundle struct {
 	Path string
 	// Concepts maps each unique Concept ID (e.g., "tables/users") to its Concept data.
 	Concepts map[string]*Concept
+	// IndexFiles maps bundle-relative slash paths (e.g., "index.md", "apis/index.md") to parsed index documents.
+	IndexFiles map[string]*Concept
 	// OKFVersion is the targeted OKF version declared in the bundle-root index.md frontmatter.
 	OKFVersion string
 }
@@ -19,8 +21,9 @@ type Bundle struct {
 // NewBundle initializes a new empty Bundle with the given root path.
 func NewBundle(path string) *Bundle {
 	return &Bundle{
-		Path:     path,
-		Concepts: make(map[string]*Concept),
+		Path:       path,
+		Concepts:   make(map[string]*Concept),
+		IndexFiles: make(map[string]*Concept),
 	}
 }
 
