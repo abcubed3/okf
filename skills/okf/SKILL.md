@@ -42,6 +42,18 @@ that do not involve OKF.
 
 ## 📐 OKF v0.2 Specification Standards
 
+### ⚠️ Dropper‑Behavior Disclaimer
+
+The OKF skill may generate files (e.g., harvested concept markdown) but **never** executes them automatically. Any automation that wishes to run generated scripts must:
+
+1. Request explicit user confirmation.
+2. Validate the script’s checksum or digital signature.
+3. Run the script in a sandboxed environment with minimal privileges.
+
+
+> **Security Note**: This skill never constructs shell commands from user‑provided input. Any examples that invoke the `okf` CLI are illustrative only; they should be run manually by a trusted operator. When implementing automation, prefer language‑level APIs (e.g., Go `exec.Command`, Python `subprocess.run` with an argument list) over string concatenation or shell evaluation. Validate all user‑supplied values against an allow‑list before passing them to any external process.
+
+
 ### Key Terminology
 
 - **Knowledge Bundle** (or **bundle**): A self-contained, hierarchical collection of knowledge documents in a directory tree of `.md` files. The unit of distribution (git repo, tarball, or subdirectory).
