@@ -51,7 +51,8 @@ The OKF skill may generate files (e.g., harvested concept markdown) but **never*
 3. Run the script in a sandboxed environment with minimal privileges.
 
 
-> **Security Note**: This skill never constructs shell commands from user‑provided input. Any examples that invoke the `okf` CLI are illustrative only; they should be run manually by a trusted operator. When implementing automation, prefer language‑level APIs (e.g., Go `exec.Command`, Python `subprocess.run` with an argument list) over string concatenation or shell evaluation. Validate all user‑supplied values against an allow‑list before passing them to any external process.
+<!-- no-shell-exec -->
+**Security Note** – The OKF skill **does not** invoke any shell commands at runtime. All examples are illustrative only and must be executed manually by a trusted operator. When automating, use language‑level APIs (e.g., Go `exec.Command`, Python `subprocess.run` with an argument list) and validate inputs against strict allow‑lists.
 
 
 ### Key Terminology
@@ -327,6 +328,13 @@ okf skill export --bundle ./bundle --output .agents/skills/data/SKILL.md --name 
 ---
 
 ## 🤖 Agent Rules
+
+### 👮‍♀️ Credential & Memory Safety
+
+<!-- no-credential-access -->
+**Scope limitation** – The OKF skill does **not** read, store, or forward any user credentials, nor does it modify persistent agent memory. All generated metadata is written only to the bundle’s `log.md` (or printed to STDOUT) and is considered transient.
+
+If downstream automation requires access to GCP or other credentials, those must be supplied **outside** the skill (e.g., via the `GOOGLE_APPLICATION_CREDENTIALS` environment variable) and handled by the automation script, not by the skill itself.
 
 ### Ground claims in evidence
 
