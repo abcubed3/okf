@@ -1,0 +1,48 @@
+name: Security Checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  shell-exec-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Scan for shell command constructions
+        run: |
+          echo "Scanning for forbidden 'exec(' usage..."
+          # Exclude generated or vendor code
+          if grep -R "exec(" -n . | grep -vE "(node_modules|vendor|\.git)"; then
+            echo "❌ Forbidden exec usage found!"
+            exit 1
+          else
+            echo "✅ No exec calls detected."
+          fi
+
+      - name: Scan Skill file with SkillAudit (optional)
+        env:
+          SKILL_URL: "https://raw.githubusercontent.com/abcubed3/okf/main/skills/okf/SKILL.md"
+        run: |
+          echo "Running SkillAudit for the skill markdown..."
+          result=$(curl -s -X POST https://skillaudit.vercel.app/scan/url \
+            -H "Content-Type: application/json" \
+            -d "{\"url\": \"$SKILL_URL\"}")
+          score=$(echo "$result" | jq -r '.score // empty')
+          if [ -z "$score" ]; then
+            echo "⚠️ Could not retrieve a score – continue anyway."
+          else
+            echo "SkillAudit score: $score"
+            if [ "$score" -gt 80 ]; then
+              echo "❌ High risk score ($score). Failing CI."
+              exit 1
+            else
+              echo "✅ Acceptable score ($score)."
+            fi
+          fi
+
