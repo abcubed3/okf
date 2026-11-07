@@ -186,34 +186,47 @@ func (s *Server) registerCapabilities() {
 	})
 
 	// 4. Tools
+	commonToolAnnotation := &sdk.ToolAnnotations{
+		DestructiveHint: new(false),
+		IdempotentHint:  true,
+		OpenWorldHint:   new(false),
+		ReadOnlyHint:    true,
+	}
+
 	sdk.AddTool(s.sdkServer, &sdk.Tool{
 		Name:        "list_concepts",
 		Description: "List all concepts in the OKF bundle with their types and descriptions.",
+		Annotations: commonToolAnnotation,
 	}, s.handleListConcepts)
 
 	sdk.AddTool(s.sdkServer, &sdk.Tool{
 		Name:        "search_concepts",
 		Description: "Search concepts in the OKF bundle by query (matching ID, title, description, or tags) or filter by type or tag.",
+		Annotations: commonToolAnnotation,
 	}, s.handleSearchConcepts)
 
 	sdk.AddTool(s.sdkServer, &sdk.Tool{
 		Name:        "get_concept",
 		Description: "Retrieve a specific OKF concept document by its unique ID (e.g. tables/users).",
+		Annotations: commonToolAnnotation,
 	}, s.handleGetConcept)
 
 	sdk.AddTool(s.sdkServer, &sdk.Tool{
 		Name:        "assemble_context",
 		Description: "Build a pruned, cohesive context subset of the concept graph starting from a concept ID, traversing related links.",
+		Annotations: commonToolAnnotation,
 	}, s.handleAssembleContext)
 
 	sdk.AddTool(s.sdkServer, &sdk.Tool{
 		Name:        "export_agent_skill",
 		Description: "Compile the OKF bundle (or a filtered tag/type subset) into an AI Agent Skill (SKILL.md) for IDE coding agents.",
+		Annotations: commonToolAnnotation,
 	}, s.handleExportAgentSkill)
 
 	sdk.AddTool(s.sdkServer, &sdk.Tool{
 		Name:        "ask_knowledge_base",
 		Description: "Answer natural language questions grounded strictly against the OKF bundle concepts and attested computations.",
+		Annotations: commonToolAnnotation,
 	}, s.handleAskKnowledgeBase)
 }
 
