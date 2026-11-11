@@ -25,11 +25,59 @@
 > - **Opinionated AI Agent Skill (`okf skill`)**: Compile any knowledge bundle into an active `SKILL.md` or install the official OKF skill (`okf skill install`) with embedded references (`spec-v02.md`, `create-bundle.md`, `cli-cheatsheet.md`) and examples for Antigravity, Claude Code, Cursor, Windsurf, and Codex.
 > - **Grounded AI Q&A (`okf ask`)**: Natural language question answering directly from the CLI backed by deterministic BFS context assembly and Gemini generative AI, citing verified concept files and verbatim attested computations.
 > - **Attested Computation & Trust Layer (OKF Spec v0.2)**: Native support for provenance (`sources`), freshness (`stale_after`), verification tiers (`generated`/`verified`), and reproducible computations (`type: Attested Computation`).
-> - **Unified CLI Architecture**: All toolchains (`lint`, `harvest`, `assemble`, `mcp`, `skill`, `ask`, `doc`, `lsp`, `sync`, `export`, `diff`, `merge`) consolidated into a single, high-performance `okf` executable.
+> - **Unified CLI Architecture**: All toolchains (`lint`, `harvest`, `assemble`, `mcp` / `server`, `skill`, `ask`, `doc`, `lsp`, `sync`, `export`, `diff`, `merge`, `publish`, `push`, `pull`, `search`, `auth`) consolidated into a single, high-performance `okf` executable.
+
+## System Overview
 
 The **Open Knowledge Format (OKF)** is a vendor-neutral, lightweight specification for structuring organizational knowledge (documentation, runbooks, metrics, database schemas, and API definitions) into machine-readable, human-friendly Markdown files.
 
-By representing knowledge as a directory of Markdown files with structured YAML frontmatter, OKF bridges the gap between structured metadata repositories and unstructured text documentation, serving as an ideal substrate for **AI agents**, **Retrieval-Augmented Generation (RAG)** pipelines, and the **Model Context Protocol (MCP)**. **OKF-go** provides native, full-featured support for **OKF Specification v0.2**, including its Trust Layer and Attested Computation.
+By representing knowledge as a directory of Markdown files with structured YAML frontmatter, OKF bridges the gap between structured metadata repositories and unstructured text documentation, serving as an ideal substrate for **AI agents**, **Retrieval-Augmented Generation (RAG)** pipelines, and the **Model Context Protocol (MCP)**. **OKF-go** (`github.com/abcubed3/okf`) provides native, full-featured support for **OKF Specification v0.2**, including its Trust Layer and Attested Computation, consolidating CLI subcommands (`internal/cli`) over modular Go library packages (`pkg/*`) and embedded agent skills (`skills`).
+
+## Local Interface & Invariants
+
+- **Direct Symbols & Build Interfaces**:
+  - `[go.mod:module]` — Go module `github.com/abcubed3/okf` targeting `go 1.26.2` (`[go.mod:go]`).
+  - `[Taskfile.yml:tasks]` — Task runner targets `default`, `build`, `test`, `benchmark`, `lint`, `cross-compile`, `clean`, `release:status`, `tag`, `tag:patch`, `tag:minor`, `tag:major`, and `tag:push`, injecting `Version`, `Commit`, and `Date` via `[Taskfile.yml:vars]` (`LDFLAGS`).
+  - `[action.yml:inputs]` — Composite GitHub Action `'OKFgo Lint'` accepting optional inputs `path` (default `'.'`), `version` (default `'latest'`), and `working-directory` (default `'.'`), emitting output `bundle-path` (`[action.yml:outputs.bundle-path]`).
+  - `[.goreleaser.yaml:builds]` — GoReleaser v2 build configuration compiling `./cmd/okf` into `tar.gz`/`zip` release archives (`[.goreleaser.yaml:archives]`), `checksums.txt` (`[.goreleaser.yaml:checksum]`), and multi-arch OCI container images `ghcr.io/abcubed3/okf` (`[.goreleaser.yaml:dockers_v2]`).
+  - `[Containerfile:ENTRYPOINT]` — Distroless container definition (`WORKDIR /bundle`, `EXPOSE 8080`, `ENTRYPOINT ["/usr/local/bin/okf"]`) parameterized by `ARG TARGETPLATFORM`.
+  - `[.gitlab-ci.yml:include]` — GitLab CI pipeline testing component `$CI_SERVER_FQDN/$CI_PROJECT_PATH/lint@$CI_COMMIT_SHA` (`path: 'testdata'`) defined in `[templates/lint.yml]` (`[templates/lint.yml:spec]` inputs `stage`, `path`, `version`) and publishing releases via `[.gitlab-ci.yml:component-release]`.
+  - `[okf.yaml:connectors.google_drive]` — Sample workspace connector configuration defining `google_drive` (`folder_id`; `type` and `resolve_linked_resources` keys are informational and ignored by `pkg/sync.GoogleDriveConfig`, while `service_account` or `credentials_file` is required at runtime).
+  - `[install.sh:TAG]` — POSIX shell installer accepting optional positional version tag `$1` and optional `INSTALL_DIR` environment variable (`[install.sh:INSTALL_DIR]`).
+- **Root-Level Invariants**:
+  - `[go.mod:go]` requires Go `1.26.2`; `[.goreleaser.yaml:builds]` enforces `CGO_ENABLED=0` across `linux`/`darwin`/`windows` (`amd64`/`arm64`) while excluding `windows/arm64` (`[.goreleaser.yaml:builds.ignore]`).
+  - `[Taskfile.yml:tag]` rejects empty or `"dev"` tags, enforces semver regex `^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$`, requires a clean Git working tree unless `FORCE=true`/`1`, and forbids overwriting existing Git tags.
+  - `[Containerfile:FROM]` runs non-root on `gcr.io/distroless/static-debian13:nonroot`; `[.goreleaser.yaml:dockers_v2]` restricts container platforms to `linux/amd64` and `linux/arm64` and applies `latest` only when `not .Prerelease`.
+  - `[install.sh:OS]` and `[install.sh:ARCH]` restrict targets to `darwin`/`linux`/`windows` on `amd64`/`arm64`, reject `windows/arm64`, and exit `1` if version lookup fails or neither `curl` nor `wget` is installed.
+- **Root-Level Side Effects**:
+  - `[Taskfile.yml:build]` and `[Taskfile.yml:cross-compile]` write `./okf` and `dist/bin/*`; `[Taskfile.yml:lint]` runs `go fmt ./...` in place; `[Taskfile.yml:tag]` creates and pushes annotated Git tags (`PUSH=true` by default unless `DRY_RUN` is set).
+  - `[install.sh:URL]` fetches GitHub release archives into a `mktemp -d` directory, extracts and installs `okf` (`chmod +x`) into `/usr/local/bin`, `~/.local/bin`, or `./bin`, and sends an asynchronous `POST` `cli_installed` event to `https://okfgo.dev/api/telemetry`; `[action.yml:runs.steps]` invokes `install.sh`, updates `$GITHUB_PATH`/`$GITHUB_OUTPUT`, and runs `okf lint`.
+
+## Subdirectories & System Boundaries
+
+- `cmd`: [./cmd/README.md](./cmd/README.md) - Executable binary entrypoints grouping `./cmd/okf` ([./cmd/okf/README.md](./cmd/okf/README.md)), which defines build-time `Version`, `Commit`, and `Date` metadata and delegates process execution to `internal/cli`.
+- `internal`: [./internal/README.md](./internal/README.md) - Module-private Go packages grouping `./internal/cli` ([./internal/cli/README.md](./internal/cli/README.md)), which routes all `okf` CLI subcommands and flags across `pkg/*` services.
+- `pkg`: [./pkg/README.md](./pkg/README.md) - Public Go domain and infrastructure packages covering bundle models (`bundle`), concurrent parsing (`parser`), conformance/trust validation (`validator`), database/API/Git/web harvesting (`harvester`), bounded BFS context assembly (`assembly`), Gemini Q&A and curation (`ai`), static HTML portal generation (`generator`), JSON-LD and Agent Skill export (`export`, `skill`), OKF Hub operations (`config`, `publish`, `pull`, `search`), bidirectional sync (`sync`), telemetry (`telemetry`), and LSP/MCP servers (`server`).
+- `skills`: [./skills/README.md](./skills/README.md) - Compile-time `embed.FS` wrapper (`ReadSkill`, `CopySkill`) embedding the official Open Knowledge Format agent skill at [./skills/okf/SKILL.md](./skills/okf/SKILL.md).
+- `docs`: [./docs/README.md](./docs/README.md) - Supplemental user guides for cloud authentication, metadata harvesting, MCP context assembly, and CI/CD marketplace publishing.
+
+## Global Invariants
+
+- **Module Visibility Boundaries**: Packages under `internal/cli` (`internal/`) and `pkg/internal/links` (`pkg/internal/`) are restricted by Go's `internal` package visibility rules so external consumers depend only on `pkg/*` and `skills`.
+- **Bundle Parsing & Reserved Files**: `pkg/parser.ParseBundleWithOptions` inspects only `.md` files (default 10 MB per-file cap), skips `log.md`, stores `index.md` files in `Bundle.IndexFiles` rather than `Bundle.Concepts`, derives forward-slash `Concept.ID` paths relative to bundle root without `.md`, and records per-file parse errors on `Concept.ParseError` so callers (`pkg/validator`, `pkg/assembly`, `pkg/export`, `pkg/generator`, `pkg/sync`) explicitly guard or report malformed concepts.
+- **Filesystem Containment**: `pkg/validator` (`bundleTargetExists`, `validateFrontmatterPath`) and `pkg/harvester.WriteConcepts` enforce lexical and symlink-resolved path containment so relative links, frontmatter resource paths, and harvested concept writes cannot escape the target bundle or output root directory.
+- **OKF v0.2 Trust & Attestation Semantics**: Actor trust tiers (`pkg/bundle.DeriveActorTrustTier`) resolve deterministically (`"human:"` prefix -> `"human-reviewed"`, other non-empty -> `"machine-confirmed"`, empty -> `"unverified"`), while `pkg/validator` enforces required `runtime` or legacy `attestation` fields on `Attested Computation` / `Attestation` concepts and elevates `WARNING` findings to CLI exit failures only under `okf lint --strict` (`internal/cli.RunLint`).
+- **Thread-Safe Live Server State**: Long-running protocol daemons (`pkg/server/mcp.Server`, `pkg/server/lsp.Server`) and sync persistence (`pkg/sync.StateManager`) guard shared in-memory bundle graphs and state maps with `sync.RWMutex`, preserving the last valid bundle on `mcp` hot-reload parse errors and persisting `.okf/state.json` via atomic temp-file rename.
+
+## Global Side Effects
+
+- **Local Filesystem Reads & Mutations**: Parses and writes Markdown/YAML concept bundles, `.okf/state.json` sync state, `~/.okf/config.json` (`0700`/`0600`) credentials, `viz.html` + `concepts/<id>.json` static portals, `schema.jsonld` graphs, workspace `SKILL.md` directories, and temporary shallow Git clones (`os.MkdirTemp`).
+- **External Databases, Cloud APIs, & LLMs**: Issues metadata queries and RPCs against PostgreSQL, MySQL, Cloud Spanner, BigQuery (`pkg/harvester`), Google Gemini (`pkg/ai`, `pkg/harvester` via `GEMINI_API_KEY`), Google Drive v3 (`pkg/sync`), remote Git origins (`pkg/parser`, `pkg/harvester`, `pkg/sync`), target web hosts (`colly` crawler in `pkg/harvester`), and OKF Hub REST endpoints (`/api/bundles`, `/api/bundles/push`, `/api/concepts`).
+- **Local Network Listeners, Stdio Servers, & Telemetry**: Serves blocking JSON-RPC over process stdio (`okf mcp`, `okf lsp`), binds TCP HTTP listeners for streamable MCP (`:<port>` with localhost `Origin` and optional bearer `Token` checks) and OAuth/auth callbacks (`:8080` in `pkg/sync`, `:8989` in `internal/cli`), and sends asynchronous fire-and-forget anonymous telemetry events to `https://okfgo.dev/api/telemetry` when `--remote` is enabled or via `install.sh`.
+
+## System Verification
+
+- Run: `go test ./...`
 
 ## 📄 Knowledge Format Specification (OKF Spec v0.2)
 
@@ -72,9 +120,8 @@ generated:
   at: "2026-08-01T12:00:00Z"
 
 verified:
-  - by: "lead-data-architect@company.com"
+  - by: "human:lead-data-architect@company.com"
     at: "2026-08-01T12:15:00Z"
-    tier: "human"
 ---
 
 # Monthly Recurring Revenue (MRR)
@@ -113,7 +160,6 @@ generated:
 verified:
   - by: "human:head-of-finance@company.com"
     at: "2026-08-01T12:20:00Z"
-    tier: "human"
 stale_after: "2027-01-01T00:00:00Z"
 sources:
   - id: "rev-policy"
@@ -148,11 +194,12 @@ This concept defines the sanctioned, audit-verified computation logic for financ
 - **Grounded AI Q&A (`okf ask`):** Query verified organizational knowledge using graph BFS context assembly + Gemini generative AI, providing grounded answers with source concept citations and verbatim attested computation queries.
 - **Model Context Protocol Server (`okf mcp`):** Exposes your knowledge base directly to MCP-compatible AI clients (e.g. Claude Desktop, Cursor, Antigravity) via Stdio or HTTP transport, with built-in tools for search, context assembly, dynamic skill compilation, and grounded Q&A.
 - **Bundle Operations (`okf diff` / `okf merge`):** Compare two OKF bundles for structural and content differences, or merge them to unify distributed knowledge bases.
-- **AI Curator (`--ai-enrich` flag):** AI-powered concept curation during metadata harvesting to automatically generate business descriptions and categorize concepts using Gemini models.
-- **JSON-LD & Skill Export (`okf export`):** Export your OKF graph into JSON-LD format for the semantic web or directly into Agent Skills.
+- **AI Curator (`--ai-enrich` flag):** AI-powered concept enrichment during metadata harvesting (`pkg/ai.CurateConcepts` for `db`, `openapi`, `proto`, and `git`; `pkg/harvester.LLMClassifier` for `web`) to automatically generate business descriptions and categorize concepts using Gemini models.
+- **JSON-LD & Skill Export (`okf export`):** Export your OKF graph into Schema.org JSON-LD format (`okf export jsonld`) or directly into Agent Skills (`okf export skill` / `okf export agent-skill`).
 - **Interactive HTML Portal Compiler (`okf doc`):** Compiles an OKF bundle into an interactive static web application with search, tagging, and link relationship graphs.
-- **Language Server Protocol Daemon (`okf lsp`) & VS Code Extension:** Runs an LSP server over Standard I/O to publish diagnostic errors/warnings in real-time inside IDEs. A dedicated VS Code Extension is also available.
-- **Bi-directional Sync Daemon (`okf sync`):** Automatically synchronizes local concepts with remote document nodes in Notion, Confluence, Jira, and Google Drive.
+- **Language Server Protocol Daemon (`okf lsp`):** Runs an LSP 3.16 server over Standard I/O to publish diagnostic errors/warnings in real-time inside LSP-capable IDEs (such as VS Code and Cursor).
+- **Knowledge Sync Daemon (`okf sync`):** Synchronizes local concepts with remote repositories via the active bidirectional `git` connector, Google Drive push + prototype pull (`google_drive`), and stub `notion`, `confluence`, and `jira` connectors.
+- **OKF Hub Operations (`okf auth`, `okf publish`, `okf push`, `okf pull`, `okf search`):** Authenticate with an OKF Hub registry, publish or incrementally push bundles, pull remote `hub://` bundles, and search shared knowledge bundles.
 - **Blazing Fast Performance:** Highly optimized Go architecture parsing ~97k concepts/sec, completing full 200-node graph BFS traversals in <40µs, and validating 100-concept bundles in ~125µs.
 
 ---
@@ -192,7 +239,7 @@ Extract the binary and add it to your system's `PATH`.
 If you have Go installed, you can compile and install the CLI directly from the GitHub repository:
 
 ```bash
-go install github.com/abcubed3/okf@latest
+go install github.com/abcubed3/okf/cmd/okf@latest
 ```
 
 Ensure your `GOBIN` directory (typically `$HOME/go/bin` or `$GOPATH/bin`) is in your system's `PATH`.
@@ -314,13 +361,14 @@ okf lint /path/to/my-bundle --strict
 #### Conformance Rules
 
 - **Hard Rules (Fails with Error):**
-  - Syntactically valid YAML frontmatter.
+  - Syntactically valid YAML frontmatter and files within the 10 MB size limit (`ParseError == ""`).
   - Presence of the `type` field in frontmatter.
-  - Required fields for Attested Computations (`runtime`).
+  - Required fields for Attested Computations (`runtime` on `type: Attested Computation`, or `attestation.query` and `attestation.executor` on legacy `type: Attestation`).
+  - Remote `hub://<bundle>/<concept>` links pointing to a missing concept in a reachable Hub bundle.
 - **Soft Rules (Emits Warning; Fails with `--strict`):**
   - Presence of recommended fields (`title`, `description`).
-  - Resolves and verifies all relative Markdown links (e.g. `[Users](users.md)`) to guarantee the graph is fully connected and lacks orphaned links.
-  - Validates trust signals (`sources`, `generated`, `verified`, `stale_after`).
+  - Resolves and verifies all relative Markdown links (e.g. `[Users](users.md)`), `# Citations` URIs, and local frontmatter resource paths (`resource`, `sources[i].resource`, `computation`, `executor.resource`, `attester.resource`) to guarantee the graph is contained within the bundle root and lacks broken links.
+  - Validates lifecycle `status` (`stable` or `draft`; warns on `deprecated` or unrecognized values) and trust signals (`sources`, `generated`, `verified`, `stale_after`).
 
 #### CI/CD Automations (GitHub Actions & GitLab CI)
 
@@ -357,7 +405,7 @@ include:
       path: "."
 ```
 
-_For complete publishing guides, see [Marketplace Publishing Guide](docs/MARKETPLACE_PUBLISHING.md)._
+_For complete publishing guides, see [Marketplace Publishing Guide](./docs/MARKETPLACE_PUBLISHING.md)._
 
 ---
 
@@ -370,71 +418,72 @@ Extracts metadata from databases, API specs, protobuf files, git repositories, a
 Supports **PostgreSQL**, **MySQL**, **Cloud Spanner**, and **BigQuery**. Connects to the database, queries the information schema, and generates tables, columns, constraints, and relationships as OKF concepts.
 
 ```bash
-# PostgreSQL Example
+# PostgreSQL Example (writes concepts to ./my-bundle/tables/<table_name>.md)
 okf harvest db \
   --driver postgres \
   --conn "postgresql://postgres:password@localhost:5432/my_db?sslmode=disable" \
   --schema public \
-  --output ./my-bundle/tables
+  --output ./my-bundle
 
 # MySQL Example
 okf harvest db \
   --driver mysql \
   --conn "user:password@tcp(localhost:3306)/my_db" \
-  --output ./my-bundle/tables
+  --output ./my-bundle
 
 # Cloud Spanner Example
 okf harvest db \
   --driver spanner \
   --conn "projects/my-project/instances/my-instance/databases/my-db" \
-  --output ./my-bundle/tables
+  --output ./my-bundle
 
 # BigQuery Example
 okf harvest db \
   --driver bigquery \
   --conn "projects/my-project" \
   --dataset "my_dataset" \
-  --output ./my-bundle/tables
+  --output ./my-bundle
 ```
 
 #### B. OpenAPI Spec Harvesting (`harvest openapi`)
 
-Parses OpenAPI spec documents (JSON/YAML) and generates OKF concepts representing API endpoints.
+Parses OpenAPI spec documents (JSON/YAML) and generates OKF concepts representing API endpoints (`endpoints/<method>-<path>.md`).
 
 ```bash
 # Harvest an OpenAPI spec and output to a bundle
-okf harvest openapi
-  --spec ../openapi-sample.yaml
-  --output harvested-endpoints
+okf harvest openapi \
+  --spec ../openapi-sample.yaml \
+  --output ./my-bundle
 ```
 
 #### C. Protobuf Schema Harvesting (`harvest proto`)
 
-Extracts messages, RPC services, and field definitions from `.proto` schemas.
+Extracts messages, RPC services, and field definitions from `.proto` schemas (`protobuf/<fqn>.md`).
 
 ```bash
 okf harvest proto \
   --path ./protos/user_service.proto \
-  --output ./my-bundle/protobufs
+  --output ./my-bundle
 ```
 
 #### D. Git Repository Harvesting (`harvest git`)
 
-Extracts metadata from a Git repository, turning commits, file structures, and architecture documents into OKF concepts.
+Extracts metadata from a Git repository, generating a `git/repository` summary concept, up to 15 recent `git/commits/<hash>` concepts, and `git/contributors/<slug>` concepts.
 
 ```bash
 okf harvest git \
   --repo https://github.com/abcubed3/okf.git \
-  --output ./my-bundle/git
+  --output ./my-bundle
 ```
 
 #### E. Web Harvesting (`harvest web`)
 
-Crawls target URLs to scrape documentation and structure it as OKF concepts. Optionally powered by the **AI Curator** (`--ai-enrich` flag) to automatically generate business descriptions and enrich concepts using Gemini models.
+Crawls target URLs (`--depth`, default `1`) to scrape documentation and structure it as OKF concepts. Optionally powered by Gemini (`--ai-enrich` using `LLMClassifier`) to classify concept types and generate descriptions, while `db`, `openapi`, `proto`, and `git` harvesters support `--ai-enrich`, `--model` (default `gemini-2.5-flash`), and `--api-key` via `CurateConcepts`.
 
 ```bash
 okf harvest web \
   --url https://example.com/docs \
+  --depth 2 \
   --output ./my-bundle/web \
   --ai-enrich
 ```
@@ -461,6 +510,8 @@ okf assemble tables/orders \
 - `--direction`: Traverse `outbound`, `inbound`, or `bidirectional` links (default: `bidirectional`).
 - `--format`: Output format, either `xml` or `markdown` (default: `xml`).
 - `--max-chars`: Maximum character budget for the output. If exceeded, traversal stops to prevent context overflow (default: `16000`).
+- `--monitor`: Render a token-budget utilization progress bar to `stderr` (default: `false`).
+- `--remote`: Emit an anonymous `assemble_run` telemetry event (default: `false`).
 
 ---
 
@@ -501,16 +552,16 @@ To register the OKF-go MCP server with Claude Desktop, add the server to your `c
 
 _Note: If `okf` is not in your system `PATH`, provide the absolute path to your `okf` executable._
 
-#### Exposed MCP Capabilities
+#### Exposed MCP Capabilities (`okf mcp` / `okf server`)
 
 - **Resources:**
   - `okf://index`: A text/markdown list of all concepts in the bundle.
-  - `okf://concept/{id}`: Resolves the complete document for a concept by its ID.
+  - `okf://concept/{+id}`: Resolves the complete document for a concept by its ID (including slash-delimited concept IDs).
 - **Prompts:**
   - `okf_concept_context`: Automatically generates an analysis prompt for a concept along with its assembled subgraph.
 - **Tools:**
   - `list_concepts`: Returns summaries of all concepts.
-  - `search_concepts`: Search matching terms in concept IDs, titles, descriptions, and tags.
+  - `search_concepts`: Search matching terms across concept IDs, titles, descriptions, tags, and bodies, with optional `type` and `tag` filters.
   - `get_concept`: Fetch raw contents of a concept.
   - `assemble_context`: Run depth-traversal context assembly dynamically from the LLM.
   - `export_agent_skill`: Compile the bundle (or filtered tags) into an Agent Skill (`SKILL.md`) dynamically.
@@ -548,27 +599,31 @@ To use with Cursor or VS Code, configure your LSP client to invoke `okf lsp` for
 
 ---
 
-### 7. Bi-directional Sync Daemon (`sync`)
+### 7. Knowledge Sync Daemon (`sync`)
 
-Keeps your OKF knowledge bundle in sync with remote document nodes. The sync daemon queries local changes and pushes them, while pulling remote updates from your workspace.
+Keeps your OKF knowledge bundle (`--bundle`, default `.`) in sync with configured remote connectors (`git` bidirectional sync, `google_drive` push + prototype pull, and stub `notion`, `confluence`, and `jira` connectors).
 
 ```bash
 # Perform a single sync cycle
-okf sync --config okf.yaml
+okf sync --bundle . --config okf.yaml
 
 # Run continuously as a daemon
-okf sync --config okf.yaml --daemon --interval 300
+okf sync --bundle . --config okf.yaml --daemon --interval 300
 ```
 
 #### Configuration (`okf.yaml`)
 
-Create an `okf.yaml` file in the bundle directory to define connector credentials:
+Create an `okf.yaml` file in the bundle directory to define connector settings:
 
 ```yaml
 connectors:
+  git:
+    repo: "https://github.com/org/knowledge-bundle.git"
+    branch: "main"
+    token: "ghp_your_token_here"
   google_drive:
     folder_id: "1234567890abcdef"
-    service_account: "sa-test@project.iam.gserviceaccount.com"
+    service_account: "/path/to/service-account-key.json" # or credentials_file / token_file
   notion:
     token: "secret_notion_api_token"
     parent_id: "notion_page_parent_uuid"
@@ -595,26 +650,26 @@ Compiles an OKF bundle or filtered tag subset into an authoritative `SKILL.md` f
 
 ```bash
 # Compile entire bundle into an Agent Skill
-okf skill export --bundle ./knowledge --output .agents/skills/data-warehouse/SKILL.md --name "data-warehouse"
+okf skill export --bundle ./knowledge --output .agents/skills/data-warehouse/SKILL.md --name "data-warehouse" --desc "Warehouse domain skill"
 
-# Filter by domain tags and types
-okf skill export --bundle ./knowledge --output .agents/skills/finance/SKILL.md --name "finance" --tags "finance,revenue"
+# Filter by domain tags and types (or omit attestations with --no-attestations)
+okf skill export --bundle ./knowledge --output .agents/skills/finance/SKILL.md --name "finance" --tags "finance,revenue" --types "Metric,Attested Computation"
 
-# Using unified export command
+# Using unified export command (alias: agent-skill)
 okf export skill --bundle ./knowledge --output ./SKILL.md
 ```
 
-#### B. Installing the Official OKF Skill (`okf skill install`)
+#### B. Installing the Official OKF Skill (`okf skill install` / `okf skill init`)
 
 Installs the official, self-contained OKF Agent Skill into your project or IDE configuration:
 
 ```bash
-# Install into default workspace location (.agents/skills/okf)
+# Install into default workspace location (.agents/skills/okf, --platform agents)
 okf skill install
 
 # Target specific agent platforms
-okf skill install --platform antigravity # Installs to .agents/skills/okf
-okf skill install --platform claude      # Installs to .claude/skills/okf
+okf skill install --platform antigravity # (or agy) Installs to .agents/skills/okf
+okf skill install --platform claude      # (or claude-code) Installs to .claude/skills/okf
 okf skill install --platform cursor      # Installs to .cursor/skills/okf
 okf skill install --dir /path/to/dir     # Installs to an explicit directory
 ```
@@ -640,27 +695,49 @@ okf ask "How is monthly recurring revenue calculated and which table stores subs
 # Direct to a specific seed concept with deeper graph traversal
 okf ask "What are the downstream dependencies of users?" --seed tables/users --depth 3 --bundle ./knowledge
 
-# Output raw answer text (ideal for piping into agent prompts or scripts)
-okf ask "What is the sanctioned query for MRR?" --bundle ./knowledge --raw
+# Output raw answer text with custom model and context budget
+okf ask "What is the sanctioned query for MRR?" --bundle ./knowledge --max-chars 16000 --model gemini-3.8-flash --raw
+```
+
+---
+
+### 10. Bundle Diff, Merge, JSON-LD Export, & OKF Hub (`diff`, `merge`, `export`, `auth`, `publish`, `push`, `pull`, `search`)
+
+```bash
+# Compare two bundles for structural and metadata drift
+okf diff ./bundle-v1 ./bundle-v2
+
+# Merge two bundles using union, ours, or theirs strategy
+okf merge ./bundle-source ./bundle-target --strategy union --output ./bundle-merged
+
+# Export a bundle to a Schema.org JSON-LD graph
+okf export jsonld --bundle ./knowledge --output schema.jsonld
+
+# Authenticate, publish, push, search, and pull bundles with OKF Hub
+okf auth login --token "$OKF_HUB_API_KEY"
+okf publish ./knowledge --host http://localhost:8080
+okf push ./knowledge --host http://localhost:8080
+okf search "revenue" --tag finance --host http://localhost:8080
+okf pull hub://finance-bundle --host http://localhost:8080
 ```
 
 ---
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) to learn how to set up your development environment, run linters, execute unit tests, and submit pull requests.
+Contributions are welcome! Please read our [Contributing Guide](./CONTRIBUTING.md) to learn how to set up your development environment, run linters, execute unit tests, and submit pull requests.
 
 ---
 
 ## Telemetry
 
-When `--remote` is enabled, the CLI sends an anonymous `mcp_start_remote` telemetry event to the OKF Hub. To use the local MCP server without sending this event, explicitly set `--remote=false`:
+When `--remote` is enabled on `okf mcp` (`mcp_start_remote`) or `okf assemble` (`assemble_run`), or when `install.sh` completes installation (`cli_installed`), an anonymous telemetry event is sent to `https://okfgo.dev/api/telemetry`. To use the local MCP server or context assembler without sending `--remote` events, leave `--remote=false` (the default):
 
 ```bash
 OTEL_SDK_DISABLED=true okf mcp --remote=false
 ```
 
-`--remote` defaults to `false`, but setting it explicitly makes the local-only behavior clear. `OTEL_SDK_DISABLED=true` disables OpenTelemetry SDK instrumentation; it does not disable this event, which is sent directly over HTTP. The `--remote=false` setting is what prevents `mcp_start_remote` from being sent.
+`--remote` defaults to `false`, but setting it explicitly makes the local-only behavior clear. `OTEL_SDK_DISABLED=true` disables OpenTelemetry SDK instrumentation; it does not disable direct HTTP telemetry events when `--remote` is set.
 
 ---
 
@@ -672,4 +749,4 @@ OTEL_SDK_DISABLED=true okf mcp --remote=false
 
 ## 📄 License
 
-This project is licensed under the Apache License 2.0. See the [LICENSE](LICENSE) file for the full text.
+This project is licensed under the Apache License 2.0. See the [LICENSE](./LICENSE) file for the full text.

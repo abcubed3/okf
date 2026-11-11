@@ -63,6 +63,19 @@ func createSampleBundle() *bundle.Bundle {
 		Body: "| id | email |",
 	}
 
+	b.Concepts["computations/revenue"] = &bundle.Concept{
+		ID:   "computations/revenue",
+		Path: "/test/computations/revenue.md",
+		Frontmatter: bundle.Frontmatter{
+			Type:    "Attested Computation",
+			Title:   "Fiscal Year Revenue Computation",
+			Desc:    "Recognized revenue for a fiscal year.",
+			Tags:    []string{"finance", "fiscal"},
+			Runtime: "bigquery",
+		},
+		Body: "# Computation\n\n    SELECT SUM(amount) AS revenue\n    FROM finance.recognized_revenue\n    WHERE fiscal_year = @year\n",
+	}
+
 	return b
 }
 
@@ -122,5 +135,16 @@ func TestAskBundle_OfflineAssembly(t *testing.T) {
 
 	if !strings.Contains(res.Answer, "Sanctioned Computation Query (Attested)") {
 		t.Errorf("Expected offline answer to highlight sanctioned computation query")
+	}
+
+	resV02, err := ai.AskBundle(context.Background(), b, "How is fiscal year revenue computed?", ai.AskOptions{
+		SeedConcept: "computations/revenue",
+		Depth:       1,
+	})
+	if err != nil {
+		t.Fatalf("AskBundle for Attested Computation failed: %v", err)
+	}
+	if len(resV02.Attestations) == 0 || !strings.Contains(resV02.Attestations[0], "SELECT SUM(amount) AS revenue") {
+		t.Errorf("Expected v0.2 Attested Computation query in Attestations, got: %+v", resV02.Attestations)
 	}
 }

@@ -81,12 +81,14 @@ func runHarvestDB(args []string) error {
 		projectID := *connStr
 		ds := *dataset
 
-		// Support projects/PROJECT_ID/datasets/DATASET_ID format
+		// Support projects/PROJECT_ID/datasets/DATASET_ID or projects/PROJECT_ID format
 		if strings.HasPrefix(*connStr, "projects/") {
 			parts := strings.Split(*connStr, "/")
 			if len(parts) == 4 && parts[0] == "projects" && parts[2] == "datasets" {
 				projectID = parts[1]
 				ds = parts[3]
+			} else if len(parts) == 2 && parts[0] == "projects" && parts[1] != "" {
+				projectID = parts[1]
 			}
 		}
 

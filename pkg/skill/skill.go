@@ -93,7 +93,9 @@ func ExportBundleToSkill(b *bundle.Bundle, opts ExportOptions) (string, error) {
 	var attestations []*bundle.Concept
 	for _, id := range conceptIDs {
 		c := filtered[id]
-		if strings.EqualFold(c.Frontmatter.Type, "Attestation") || (c.Frontmatter.Attestation != nil && c.Frontmatter.Attestation.Query != "") {
+		if strings.EqualFold(c.Frontmatter.Type, "Attestation") ||
+			strings.EqualFold(c.Frontmatter.Type, "Attested Computation") ||
+			c.SanctionedQuery() != "" {
 			attestations = append(attestations, c)
 		}
 	}
@@ -110,20 +112,32 @@ func ExportBundleToSkill(b *bundle.Bundle, opts ExportOptions) (string, error) {
 			if a.Frontmatter.Desc != "" {
 				sb.WriteString(fmt.Sprintf("%s\n\n", a.Frontmatter.Desc))
 			}
+			runtimeEngine := strings.TrimSpace(a.Frontmatter.Runtime)
+			if runtimeEngine == "" && a.Frontmatter.Attestation != nil {
+				runtimeEngine = strings.TrimSpace(a.Frontmatter.Attestation.Executor)
+			}
+			if runtimeEngine == "" && a.Frontmatter.Executor != nil {
+				runtimeEngine = strings.TrimSpace(a.Frontmatter.Executor.Resource)
+			}
+			if runtimeEngine != "" {
+				sb.WriteString(fmt.Sprintf("- **Target Runtime / Engine:** `%s`\n", runtimeEngine))
+			}
+
+			attester := ""
 			if a.Frontmatter.Attestation != nil {
-				if a.Frontmatter.Attestation.Executor != "" {
-					sb.WriteString(fmt.Sprintf("- **Target Runtime / Engine:** `%s`\n", a.Frontmatter.Attestation.Executor))
-				}
-				if a.Frontmatter.Attestation.Attester != "" {
-					sb.WriteString(fmt.Sprintf("- **Attester:** `%s`\n", a.Frontmatter.Attestation.Attester))
-				}
+				attester = strings.TrimSpace(a.Frontmatter.Attestation.Attester)
+			}
+			if attester == "" && a.Frontmatter.Attester != nil {
+				attester = strings.TrimSpace(a.Frontmatter.Attester.Resource)
+			}
+			if attester != "" {
+				sb.WriteString(fmt.Sprintf("- **Attester:** `%s`\n", attester))
 			}
 			if len(a.Frontmatter.Verified) > 0 {
 				sb.WriteString(fmt.Sprintf("- **Verification Tier:** `%s` (by %s)\n", a.Frontmatter.Verified[0].Tier(), a.Frontmatter.Verified[0].By))
 			}
-			if a.Frontmatter.Attestation != nil && a.Frontmatter.Attestation.Query != "" {
+			if query := a.SanctionedQuery(); query != "" {
 				sb.WriteString("\n```sql\n")
-				query := strings.TrimSpace(a.Frontmatter.Attestation.Query)
 				sb.WriteString(query)
 				sb.WriteString("\n```\n\n")
 			}

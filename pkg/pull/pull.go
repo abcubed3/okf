@@ -30,7 +30,10 @@ func PullBundle(hubURI, host, apiKey string) error {
 		return fmt.Errorf("invalid URI format: must start with hub://")
 	}
 
-	bundleID := strings.TrimPrefix(hubURI, "hub://")
+	bundleID := strings.TrimSpace(strings.TrimPrefix(hubURI, "hub://"))
+	if bundleID == "" {
+		return fmt.Errorf("invalid URI format: bundle ID cannot be empty")
+	}
 	// If it has multiple segments, assume the first segment is the bundle ID for now.
 	// Actually, based on previous design, bundleID can be "namespace/bundle" like "stripe/api"
 	// So we pass the entire remainder as the bundleID.
@@ -66,10 +69,10 @@ func PullBundle(hubURI, host, apiKey string) error {
 
 	// Try unmarshaling as wrapped response {"concepts": [...], "links": [...]}
 	var wrapper struct {
-		Concepts []ConceptResponse `json:"concepts"`
+		Concepts *[]ConceptResponse `json:"concepts"`
 	}
-	if err := json.Unmarshal(bodyBytes, &wrapper); err == nil && len(wrapper.Concepts) > 0 {
-		concepts = wrapper.Concepts
+	if err := json.Unmarshal(bodyBytes, &wrapper); err == nil && wrapper.Concepts != nil {
+		concepts = *wrapper.Concepts
 	} else {
 		// Fallback to flat array
 		if err := json.Unmarshal(bodyBytes, &concepts); err != nil {
@@ -84,7 +87,11 @@ func PullBundle(hubURI, host, apiKey string) error {
 
 	// Create local directory in the current working directory
 	cacheDir := bundleID
-	if err := os.MkdirAll(cacheDir, 0755); err != nil {
+	absCacheDir, err := filepath.Abs(cacheDir)
+	if err != nil {
+		return fmt.Errorf("failed to resolve directory: %w", err)
+	}
+	if err := os.MkdirAll(absCacheDir, 0755); err != nil {
 		return fmt.Errorf("failed to create directory: %w", err)
 	}
 
@@ -110,7 +117,11 @@ func PullBundle(hubURI, host, apiKey string) error {
 		}
 
 		content := fmt.Sprintf("---\n%s---\n\n# %s\n\n%s\n", yamlData, c.Title, c.Description)
-		filePath := filepath.Join(cacheDir, c.ID+".md")
+		filePath := filepath.Join(absCacheDir, filepath.FromSlash(c.ID)+".md")
+		if !strings.HasPrefix(filePath, absCacheDir+string(os.PathSeparator)) {
+			fmt.Printf("Skipping unsafe concept path outside bundle root: %s\n", c.ID)
+			continue
+		}
 
 		// Create subdirectories if concept ID has slashes
 		if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {

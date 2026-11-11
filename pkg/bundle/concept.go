@@ -28,6 +28,8 @@ const (
 
 // Source represents provenance information for an OKF v0.2 concept document.
 type Source struct {
+	// ID is an optional local footnote/citation identifier within the concept document (e.g., "rev-policy").
+	ID string `yaml:"id,omitempty" json:"id,omitempty"`
 	// Resource is the URI or bundle-relative path of the source material.
 	Resource string `yaml:"resource,omitempty" json:"resource,omitempty"`
 	// Title is the human-readable description of the source material.
@@ -296,4 +298,78 @@ func (c *Concept) TrustTier() string {
 		return TrustTierMachineConfirmed
 	}
 	return TrustTierUnverified
+}
+
+// SanctionedQuery extracts the sanctioned computation query or reference for an Attestation
+// or OKF v0.2 Attested Computation concept. It checks Frontmatter.Attestation.Query first,
+// then extracts inline fenced or indented code blocks under a "# Computation" heading in Body,
+// and finally falls back to Frontmatter.Computation.
+func (c *Concept) SanctionedQuery() string {
+	if c == nil {
+		return ""
+	}
+	if c.Frontmatter.Attestation != nil && strings.TrimSpace(c.Frontmatter.Attestation.Query) != "" {
+		return strings.TrimSpace(c.Frontmatter.Attestation.Query)
+	}
+	cType := strings.ToLower(strings.TrimSpace(c.Frontmatter.Type))
+	if cType != "attested computation" && cType != "attestation" {
+		return ""
+	}
+	if q := extractComputationFromBody(c.Body); q != "" {
+		return q
+	}
+	return strings.TrimSpace(c.Frontmatter.Computation)
+}
+
+func extractComputationFromBody(body string) string {
+	lines := strings.Split(body, "\n")
+	inSection := false
+	inFence := false
+	var fenceLines []string
+	var indentedLines []string
+
+	for _, rawLine := range lines {
+		line := strings.TrimRight(rawLine, "\r")
+		trimmed := strings.TrimSpace(line)
+
+		if !inFence && strings.HasPrefix(trimmed, "#") {
+			heading := strings.TrimSpace(strings.TrimLeft(trimmed, "#"))
+			if strings.EqualFold(heading, "computation") {
+				inSection = true
+				continue
+			}
+			if inSection {
+				break
+			}
+		}
+		if !inSection {
+			continue
+		}
+
+		if strings.HasPrefix(trimmed, "```") {
+			if inFence {
+				return strings.TrimSpace(strings.Join(fenceLines, "\n"))
+			}
+			inFence = true
+			continue
+		}
+		if inFence {
+			fenceLines = append(fenceLines, line)
+			continue
+		}
+
+		if strings.HasPrefix(line, "    ") {
+			indentedLines = append(indentedLines, strings.TrimPrefix(line, "    "))
+		} else if strings.HasPrefix(line, "\t") {
+			indentedLines = append(indentedLines, strings.TrimPrefix(line, "\t"))
+		} else if trimmed == "" {
+			if len(indentedLines) > 0 {
+				indentedLines = append(indentedLines, "")
+			}
+		} else if len(indentedLines) > 0 {
+			break
+		}
+	}
+
+	return strings.TrimSpace(strings.Join(indentedLines, "\n"))
 }

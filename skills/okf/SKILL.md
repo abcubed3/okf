@@ -296,17 +296,17 @@ okf ask "How is active subscription MRR calculated?" --bundle ./bundle
 ### Harvest metadata
 
 ```bash
-# Harvest from PostgreSQL / MySQL / Spanner
-okf harvest postgres --dsn "postgres://user:pass@localhost:5432/db" --out ./concepts
+# Harvest from PostgreSQL / MySQL / Spanner / BigQuery
+okf harvest db --driver postgres --conn "postgres://user:pass@localhost:5432/db" --output ./concepts
 
 # Harvest OpenAPI / Swagger specification
-okf harvest openapi --spec ./openapi.yaml --out ./concepts/api
+okf harvest openapi --spec ./openapi.yaml --output ./concepts
 
-# Harvest Git codebase architecture
-okf harvest git --repo . --out ./concepts/architecture
+# Harvest Git codebase metadata (repository, recent commits, contributors)
+okf harvest git --repo . --output ./concepts
 
 # AI-enrich during harvest (Gemini business descriptions)
-okf harvest postgres --dsn "$DB_URL" --out ./concepts --ai-enrich
+okf harvest db --driver postgres --conn "$DB_URL" --output ./concepts --ai-enrich
 ```
 
 ### Serve over MCP

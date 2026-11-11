@@ -46,6 +46,9 @@ func SendEvent(eventName, bundleName string) {
 		req.Header.Set("Content-Type", "application/json")
 
 		client := &http.Client{Timeout: 5 * time.Second}
-		_, _ = client.Do(req)
+		resp, err := client.Do(req)
+		if err == nil && resp != nil {
+			_ = resp.Body.Close()
+		}
 	}()
 }

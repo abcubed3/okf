@@ -172,8 +172,8 @@ func AskBundle(ctx context.Context, b *bundle.Bundle, query string, opts AskOpti
 	for _, node := range res.Nodes {
 		referencedIDs = append(referencedIDs, node.ID)
 		if c, exists := b.Concepts[node.ID]; exists {
-			if c.Frontmatter.Attestation != nil && c.Frontmatter.Attestation.Query != "" {
-				attestations = append(attestations, c.Frontmatter.Attestation.Query)
+			if q := c.SanctionedQuery(); q != "" {
+				attestations = append(attestations, q)
 			}
 		}
 	}

@@ -68,6 +68,23 @@ func createTestBundle() *bundle.Bundle {
 		Body: "| id | email | status |",
 	}
 
+	// 4. OKF v0.2 Attested Computation concept
+	b.Concepts["computations/revenue"] = &bundle.Concept{
+		ID:   "computations/revenue",
+		Path: "/test/bundle/computations/revenue.md",
+		Frontmatter: bundle.Frontmatter{
+			Type:     "Attested Computation",
+			Title:    "Revenue for Fiscal Year",
+			Desc:     "Recognized revenue for a fiscal year.",
+			Tags:     []string{"finance", "revenue"},
+			Status:   bundle.ConceptLifecycleStable,
+			Runtime:  "bigquery",
+			Executor: &bundle.Executor{Resource: "references/skills/run-on-bq.md"},
+			Attester: &bundle.Attester{Resource: "references/attesters/revenue.py"},
+		},
+		Body: "# Computation\n\n    SELECT SUM(amount) AS revenue\n    FROM finance.recognized_revenue\n    WHERE fiscal_year = @year\n",
+	}
+
 	return b
 }
 
@@ -99,6 +116,12 @@ func TestExportBundleToSkill(t *testing.T) {
 	}
 	if !strings.Contains(content, "SELECT SUM(amount) AS total_mrr") {
 		t.Errorf("Expected attested SQL query to be included")
+	}
+	if !strings.Contains(content, "SELECT SUM(amount) AS revenue") {
+		t.Errorf("Expected OKF v0.2 Attested Computation SQL query to be included, got:\n%s", content)
+	}
+	if !strings.Contains(content, "**Target Runtime / Engine:** `bigquery`") {
+		t.Errorf("Expected OKF v0.2 Runtime metadata to be included, got:\n%s", content)
 	}
 
 	// Verify Concepts Catalog

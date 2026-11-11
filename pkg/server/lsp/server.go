@@ -6,6 +6,7 @@ package lsp
 import (
 	stdcontext "context"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -126,6 +127,9 @@ func (s *Server) textDocumentDidSave(context *glsp.Context, params *protocol.Did
 	if params.Text != nil {
 		return s.parseAndValidate(context, params.TextDocument.URI, *params.Text)
 	}
+	if data, err := os.ReadFile(uriToPath(params.TextDocument.URI)); err == nil {
+		return s.parseAndValidate(context, params.TextDocument.URI, string(data))
+	}
 	return nil
 }
 
@@ -170,9 +174,8 @@ func (s *Server) parseAndValidate(context *glsp.Context, uri string, content str
 	}
 	s.activeBundle.Concepts[conceptID] = c
 	b := s.activeBundle
-	s.mu.Unlock()
-
 	issues := validator.ValidateConcept(c, b, validator.Options{}, make(map[string]map[string]bool))
+	s.mu.Unlock()
 
 	var diagnostics []protocol.Diagnostic
 	for _, issue := range issues {

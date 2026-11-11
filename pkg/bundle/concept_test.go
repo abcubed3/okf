@@ -400,4 +400,52 @@ sources:
 			t.Errorf("expected Resource %q, got %q", "https://stripe.com/spec", src2.Resource)
 		}
 	})
+
+	t.Run("YAML round-trip preserves Source.ID", func(t *testing.T) {
+		input := `
+sources:
+  - id: "rev-policy"
+    resource: "https://wiki.acme/finance/revenue-recognition"
+    title: "Revenue Recognition Policy"
+`
+		var fm bundle.Frontmatter
+		if err := yaml.Unmarshal([]byte(input), &fm); err != nil {
+			t.Fatalf("failed to unmarshal Source with id: %v", err)
+		}
+		if len(fm.Sources) != 1 || fm.Sources[0].ID != "rev-policy" {
+			t.Fatalf("expected Source.ID='rev-policy', got %+v", fm.Sources)
+		}
+		out, err := yaml.Marshal(fm.Sources[0])
+		if err != nil {
+			t.Fatalf("failed to marshal Source: %v", err)
+		}
+		if !strings.Contains(string(out), "id: rev-policy") {
+			t.Errorf("expected marshaled YAML to contain 'id: rev-policy', got:\n%s", string(out))
+		}
+	})
+}
+
+func TestConceptSanctionedQuery(t *testing.T) {
+	cIndented := &bundle.Concept{
+		Frontmatter: bundle.Frontmatter{
+			Type:    "Attested Computation",
+			Runtime: "bigquery",
+		},
+		Body: "# Computation\n\n    SELECT SUM(amount) AS revenue\n    FROM finance.recognized_revenue\n    WHERE fiscal_year = @year\n\nThe computation binds only the declared parameters.\n",
+	}
+	wantIndented := "SELECT SUM(amount) AS revenue\nFROM finance.recognized_revenue\nWHERE fiscal_year = @year"
+	if got := cIndented.SanctionedQuery(); got != wantIndented {
+		t.Errorf("SanctionedQuery() indented = %q, want %q", got, wantIndented)
+	}
+
+	cFenced := &bundle.Concept{
+		Frontmatter: bundle.Frontmatter{
+			Type:    "Attested Computation",
+			Runtime: "bigquery",
+		},
+		Body: "# Computation\n\n```sql\nSELECT COUNT(*) FROM users;\n```\n",
+	}
+	if got := cFenced.SanctionedQuery(); got != "SELECT COUNT(*) FROM users;" {
+		t.Errorf("SanctionedQuery() fenced = %q, want %q", got, "SELECT COUNT(*) FROM users;")
+	}
 }

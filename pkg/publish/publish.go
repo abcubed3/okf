@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -75,7 +77,11 @@ func PublishBundle(bundlePath, host, apiKey string) error {
 		},
 	}
 
-	for id, c := range b.Concepts {
+	for _, id := range slices.Sorted(maps.Keys(b.Concepts)) {
+		c := b.Concepts[id]
+		if c.ParseError != "" {
+			continue
+		}
 		payload.Bundle.Concepts = append(payload.Bundle.Concepts, PublishConcept{
 			ID:          id,
 			Type:        c.Frontmatter.Type,
@@ -86,7 +92,8 @@ func PublishBundle(bundlePath, host, apiKey string) error {
 	}
 
 	graph := assembly.BuildGraph(b)
-	for fromID, node := range graph.Nodes {
+	for _, fromID := range slices.Sorted(maps.Keys(graph.Nodes)) {
+		node := graph.Nodes[fromID]
 		for _, toID := range node.OutLinks {
 			payload.Bundle.Links = append(payload.Bundle.Links, GraphEdge{From: fromID, To: toID})
 		}

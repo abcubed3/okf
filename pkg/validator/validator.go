@@ -79,6 +79,9 @@ func ValidateBundle(b *bundle.Bundle, opts Options) []Issue {
 // ValidateConcept performs OKF conformance checks on a single concept against the bundle.
 func ValidateConcept(c *bundle.Concept, b *bundle.Bundle, opts Options, rcache remoteCache) []Issue {
 	var issues []Issue
+	if rcache == nil {
+		rcache = make(remoteCache)
+	}
 
 	if c.ParseError != "" {
 		issues = append(issues, Issue{
@@ -322,25 +325,26 @@ func validateLinks(c *bundle.Concept, b *bundle.Bundle, opts Options, rcache rem
 			if !ok {
 				// Fetch from Hub
 				apiURL := fmt.Sprintf("%s/api/concepts?bundle=%s", opts.Host, url.QueryEscape(bundleID))
-				req, _ := http.NewRequest("GET", apiURL, nil)
-				if opts.APIKey != "" {
-					req.Header.Set("Authorization", "Bearer "+opts.APIKey)
-				}
-				client := &http.Client{Timeout: 5 * time.Second}
-				resp, err := client.Do(req)
 				conceptSet = make(map[string]bool)
-				if err == nil && resp.StatusCode == http.StatusOK {
-					var concepts []struct {
-						ID string `json:"id"`
+				if req, reqErr := http.NewRequest("GET", apiURL, nil); reqErr == nil {
+					if opts.APIKey != "" {
+						req.Header.Set("Authorization", "Bearer "+opts.APIKey)
 					}
-					if err := json.NewDecoder(resp.Body).Decode(&concepts); err == nil {
-						for _, remC := range concepts {
-							conceptSet[remC.ID] = true
+					client := &http.Client{Timeout: 5 * time.Second}
+					resp, err := client.Do(req)
+					if err == nil && resp.StatusCode == http.StatusOK {
+						var concepts []struct {
+							ID string `json:"id"`
+						}
+						if err := json.NewDecoder(resp.Body).Decode(&concepts); err == nil {
+							for _, remC := range concepts {
+								conceptSet[remC.ID] = true
+							}
 						}
 					}
-				}
-				if resp != nil {
-					resp.Body.Close()
+					if resp != nil {
+						resp.Body.Close()
+					}
 				}
 				// Cache even on failure so we don't spam the network
 				rcache[bundleID] = conceptSet

@@ -3,6 +3,8 @@ package export
 
 import (
 	"encoding/json"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/abcubed3/okf/pkg/bundle"
@@ -60,7 +62,8 @@ type TechArticle struct {
 func ExportBundleToJSONLD(b *bundle.Bundle) ([]byte, error) {
 	graphList := make([]interface{}, 0, len(b.Concepts))
 
-	for _, c := range b.Concepts {
+	for _, id := range slices.Sorted(maps.Keys(b.Concepts)) {
+		c := b.Concepts[id]
 		if c.ParseError != "" {
 			continue
 		}
