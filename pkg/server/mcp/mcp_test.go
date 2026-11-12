@@ -84,6 +84,23 @@ func TestMCPServer(t *testing.T) {
 		if !expectedTools[tl.Name] {
 			t.Errorf("unexpected tool: %s", tl.Name)
 		}
+
+		if tl.Annotations == nil {
+			t.Errorf("tool %q has no annotations", tl.Name)
+			continue
+		}
+		if tl.Annotations.DestructiveHint == nil || *tl.Annotations.DestructiveHint {
+			t.Errorf("tool %q should be explicitly non-destructive", tl.Name)
+		}
+		if tl.Annotations.OpenWorldHint == nil || *tl.Annotations.OpenWorldHint {
+			t.Errorf("tool %q should be explicitly closed-world", tl.Name)
+		}
+		if !tl.Annotations.IdempotentHint {
+			t.Errorf("tool %q should be idempotent", tl.Name)
+		}
+		if !tl.Annotations.ReadOnlyHint {
+			t.Errorf("tool %q should be read-only", tl.Name)
+		}
 	}
 
 	// 2. Test Resources list
