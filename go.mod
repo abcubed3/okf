@@ -7,6 +7,7 @@ require (
 	github.com/JohannesKaufmann/html-to-markdown v1.6.0
 	github.com/PuerkitoBio/goquery v1.12.0
 	github.com/bufbuild/protocompile v0.14.1
+	github.com/ctreminiom/go-atlassian/v2 v2.12.0
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/getkin/kin-openapi v0.142.0
 	github.com/go-git/go-git/v5 v5.19.1
@@ -14,6 +15,7 @@ require (
 	github.com/gocolly/colly/v2 v2.3.0
 	github.com/google/generative-ai-go v0.20.1
 	github.com/googleapis/go-sql-spanner v1.26.0
+	github.com/jomei/notionapi v1.13.3
 	github.com/lib/pq v1.12.3
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/tliron/glsp v0.2.2
@@ -37,7 +39,7 @@ require (
 	cloud.google.com/go/longrunning v1.2.0 // indirect
 	cloud.google.com/go/monitoring v1.29.0 // indirect
 	cloud.google.com/go/spanner v1.92.0 // indirect
-	dario.cat/mergo v1.0.0 // indirect
+	dario.cat/mergo v1.0.2 // indirect
 	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/GoogleCloudPlatform/grpc-gcp-go/grpcgcp v1.6.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.32.0 // indirect
@@ -70,6 +72,7 @@ require (
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/flatbuffers v23.5.26+incompatible // indirect
+	github.com/google/go-querystring v1.2.0 // indirect
 	github.com/google/jsonschema-go v0.4.3 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/google/uuid v1.6.0 // indirect
@@ -107,6 +110,9 @@ require (
 	github.com/sourcegraph/jsonrpc2 v0.2.1 // indirect
 	github.com/spiffe/go-spiffe/v2 v2.6.0 // indirect
 	github.com/temoto/robotstxt v1.1.2 // indirect
+	github.com/tidwall/gjson v1.18.0 // indirect
+	github.com/tidwall/match v1.1.1 // indirect
+	github.com/tidwall/pretty v1.2.0 // indirect
 	github.com/tliron/commonlog v0.2.21 // indirect
 	github.com/tliron/go-kutil v0.4.0 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect

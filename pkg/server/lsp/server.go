@@ -174,7 +174,7 @@ func (s *Server) parseAndValidate(context *glsp.Context, uri string, content str
 	}
 	s.activeBundle.Concepts[conceptID] = c
 	b := s.activeBundle
-	issues := validator.ValidateConcept(c, b, validator.Options{}, make(map[string]map[string]bool))
+	issues := validator.ValidateConcept(c, b, validator.Options{}, nil)
 	s.mu.Unlock()
 
 	var diagnostics []protocol.Diagnostic

@@ -22,10 +22,12 @@ func RunPush(args []string) error {
 	bundlePath := "."
 	host := "http://localhost:8080"
 	apiKey := ""
+	bundleID := ""
 
 	fs := flag.NewFlagSet("push", flag.ContinueOnError)
 	fs.StringVar(&host, "host", host, "OKF Hub host URL")
 	fs.StringVar(&apiKey, "api-key", "", "OKF Hub API Key (overrides env and config)")
+	fs.StringVar(&bundleID, "id", "", "Canonical Hub bundle ID (<org>/<bundle>)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -59,16 +61,19 @@ func RunPush(args []string) error {
 		return fmt.Errorf("failed to parse bundle: %w", err)
 	}
 
-	bundleName := filepath.Base(b.Path)
+	canonicalID, err := publish.ResolveBundleID(b, bundleID)
+	if err != nil {
+		return err
+	}
 
 	// For an incremental push, we construct a patch payload
 	// In a full implementation, we would diff against the remote bundle.
 	// For this prototype, we send the parsed concepts to the /api/bundles/push endpoint as a patch.
 	payload := publish.PublishPayload{
 		Bundle: publish.BundlePayload{
-			ID:          bundleName,
-			Name:        bundleName,
-			Description: "Incremental push for: " + bundleName,
+			ID:          canonicalID,
+			Name:        canonicalID,
+			Description: "Incremental push for: " + canonicalID,
 			Concepts:    make([]publish.PublishConcept, 0, len(b.Concepts)),
 		},
 	}

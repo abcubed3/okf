@@ -75,9 +75,16 @@ func ParseBundleWithOptions(ctx context.Context, rootPath string, opts ParseOpti
 		if err != nil {
 			return err
 		}
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
 
-		// Skip directories
+		// Skip dot-directories (.git, .okf, .okf_cache, etc.) and node_modules
 		if info.IsDir() {
+			name := info.Name()
+			if path != absRoot && (strings.HasPrefix(name, ".") || name == "node_modules") {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 
@@ -98,16 +105,31 @@ func ParseBundleWithOptions(ctx context.Context, rootPath string, opts ParseOpti
 		// and the root index.md might contain okf_version.
 		if filename == "index.md" || filename == "log.md" {
 			if filename == "index.md" {
-				if f, err := os.Open(path); err == nil {
-					relSlash := filepath.ToSlash(relPath)
-					id := strings.TrimSuffix(relSlash, ".md")
-					if c, parseErr := ParseConceptReader(f, relPath, id); parseErr == nil {
-						if relSlash == "index.md" {
-							b.OKFVersion = c.Frontmatter.OKFVersion
-						}
-						b.IndexFiles[relSlash] = c
+				relSlash := filepath.ToSlash(relPath)
+				id := strings.TrimSuffix(relSlash, ".md")
+				var idxConcept *bundle.Concept
+				if info.Size() > opts.MaxFileSize {
+					idxConcept = &bundle.Concept{
+						ID:         id,
+						Path:       relPath,
+						ParseError: fmt.Sprintf("file size %d bytes exceeds the limit of %d bytes", info.Size(), opts.MaxFileSize),
 					}
+				} else if f, openErr := os.Open(path); openErr == nil {
+					c, parseErr := parseConceptReaderWithLimit(f, relPath, id, opts.MaxFileSize)
 					f.Close()
+					if parseErr != nil {
+						if c == nil {
+							c = &bundle.Concept{ID: id, Path: relPath}
+						}
+						c.ParseError = parseErr.Error()
+					}
+					idxConcept = c
+				}
+				if idxConcept != nil {
+					if relSlash == "index.md" && idxConcept.ParseError == "" {
+						b.OKFVersion = idxConcept.Frontmatter.OKFVersion
+					}
+					b.IndexFiles[relSlash] = idxConcept
 				}
 			}
 			return nil
@@ -126,7 +148,14 @@ func ParseBundleWithOptions(ctx context.Context, rootPath string, opts ParseOpti
 	})
 
 	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, ctxErr
+		}
 		return nil, fmt.Errorf("error walking bundle path: %w", err)
+	}
+
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return nil, ctxErr
 	}
 
 	if len(jobs) == 0 {
@@ -166,7 +195,7 @@ func ParseBundleWithOptions(ctx context.Context, rootPath string, opts ParseOpti
 						}
 					} else {
 						var parseErr error
-						concept, parseErr = ParseConceptFile(job.path, job.relPath, job.conceptID)
+						concept, parseErr = parseConceptFileWithLimit(job.path, job.relPath, job.conceptID, opts.MaxFileSize)
 						if parseErr != nil {
 							concept = &bundle.Concept{
 								ID:         job.conceptID,
@@ -202,24 +231,57 @@ func ParseBundleWithOptions(ctx context.Context, rootPath string, opts ParseOpti
 		b.Concepts[concept.ID] = concept
 	}
 
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return nil, ctxErr
+	}
+
 	return b, nil
 }
 
 // ParseConceptFile reads a single file from the filesystem and splits it into frontmatter and body.
 func ParseConceptFile(fullPath, relPath, conceptID string) (*bundle.Concept, error) {
+	return parseConceptFileWithLimit(fullPath, relPath, conceptID, DefaultMaxFileSize)
+}
+
+func parseConceptFileWithLimit(fullPath, relPath, conceptID string, maxFileSize int64) (*bundle.Concept, error) {
 	file, err := os.Open(fullPath)
 	if err != nil {
 		return nil, err
 	}
 	defer file.Close()
 
-	return ParseConceptReader(file, relPath, conceptID)
+	return parseConceptReaderWithLimit(file, relPath, conceptID, maxFileSize)
 }
 
 // ParseConceptReader parses from an io.Reader (useful for unit testing).
 // It extracts the YAML frontmatter block enclosed between "---" markers and retrieves the markdown body.
 func ParseConceptReader(r io.Reader, relPath, conceptID string) (*bundle.Concept, error) {
-	scanner := bufio.NewScanner(r)
+	return parseConceptReaderWithLimit(r, relPath, conceptID, DefaultMaxFileSize)
+}
+
+type countingReader struct {
+	r io.Reader
+	n int64
+}
+
+func (cr *countingReader) Read(p []byte) (int, error) {
+	n, err := cr.r.Read(p)
+	cr.n += int64(n)
+	return n, err
+}
+
+func parseConceptReaderWithLimit(r io.Reader, relPath, conceptID string, maxFileSize int64) (*bundle.Concept, error) {
+	if maxFileSize <= 0 {
+		maxFileSize = DefaultMaxFileSize
+	}
+	cr := &countingReader{r: io.LimitReader(r, maxFileSize+1)}
+	scanner := bufio.NewScanner(cr)
+	maxTokenSize := int(maxFileSize) + 1
+	if maxTokenSize < 64*1024 {
+		maxTokenSize = 64 * 1024
+	}
+	scanner.Buffer(make([]byte, 0, 64*1024), maxTokenSize)
+
 	var frontmatterLines []string
 	var bodyBuilder strings.Builder
 
@@ -228,10 +290,14 @@ func ParseConceptReader(r io.Reader, relPath, conceptID string) (*bundle.Concept
 
 	lineCount := 0
 	for scanner.Scan() {
+		if cr.n > maxFileSize {
+			return nil, fmt.Errorf("file size exceeds the limit of %d bytes", maxFileSize)
+		}
 		line := scanner.Text()
 		lineCount++
 
 		if lineCount == 1 {
+			line = strings.TrimPrefix(line, "\uFEFF")
 			if strings.TrimSpace(line) == "---" {
 				hasFrontmatter = true
 				continue
@@ -256,6 +322,16 @@ func ParseConceptReader(r io.Reader, relPath, conceptID string) (*bundle.Concept
 
 	if err := scanner.Err(); err != nil {
 		return nil, err
+	}
+	if cr.n > maxFileSize {
+		return nil, fmt.Errorf("file size exceeds the limit of %d bytes", maxFileSize)
+	}
+
+	if hasFrontmatter && !frontmatterChecked {
+		return &bundle.Concept{
+			ID:   conceptID,
+			Path: relPath,
+		}, fmt.Errorf("unclosed frontmatter '---' fence")
 	}
 
 	body := bodyBuilder.String()

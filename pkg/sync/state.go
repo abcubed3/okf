@@ -37,9 +37,17 @@ type ConceptState struct {
 	// LastPushed maps connector name → timestamp of the last successful push.
 	LastPushed map[string]time.Time `json:"last_pushed,omitempty"`
 
+	// RemoteRevisions maps connector name → remote revision marker
+	// (modifiedTime, last_edited_time, version.number, fields.updated).
+	RemoteRevisions map[string]string `json:"remote_revisions,omitempty"`
+
 	// LastPulledHash is the SHA-256 of the concept content the last time it was
 	// written to disk from a pull operation. Used to skip writing unchanged files.
 	LastPulledHash string `json:"last_pulled_hash,omitempty"`
+
+	// LastPulledHashes maps connector name → SHA-256 of the concept content
+	// last pulled from that connector.
+	LastPulledHashes map[string]string `json:"last_pulled_hashes,omitempty"`
 }
 
 // State is the full persisted sync state for the bundle.
@@ -92,6 +100,19 @@ func (sm *StateManager) Load() error {
 	if sm.state.Concepts == nil {
 		sm.state.Concepts = make(map[string]*ConceptState)
 	}
+
+	// Scrub legacy synthetic stub entries (<connector>-<conceptID>) and their ContentHashes.
+	for conceptID, cs := range sm.state.Concepts {
+		if cs == nil {
+			continue
+		}
+		for _, conn := range []string{"notion", "confluence", "jira"} {
+			if extID, ok := cs.ExternalIDs[conn]; ok && extID == conn+"-"+conceptID {
+				delete(cs.ExternalIDs, conn)
+				delete(cs.ContentHashes, conn)
+			}
+		}
+	}
 	return nil
 }
 
@@ -141,6 +162,12 @@ func (sm *StateManager) conceptState(conceptID string) *ConceptState {
 	}
 	if cs.LastPushed == nil {
 		cs.LastPushed = make(map[string]time.Time)
+	}
+	if cs.RemoteRevisions == nil {
+		cs.RemoteRevisions = make(map[string]string)
+	}
+	if cs.LastPulledHashes == nil {
+		cs.LastPulledHashes = make(map[string]string)
 	}
 	return cs
 }
@@ -199,6 +226,61 @@ func (sm *StateManager) SetLastPulledHash(conceptID, hash string) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 	sm.conceptState(conceptID).LastPulledHash = hash
+}
+
+// GetRemoteRevision returns the last recorded remote revision marker for conceptID+connectorName.
+func (sm *StateManager) GetRemoteRevision(conceptID, connectorName string) string {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+	if cs, ok := sm.state.Concepts[conceptID]; ok && cs.RemoteRevisions != nil {
+		return cs.RemoteRevisions[connectorName]
+	}
+	return ""
+}
+
+// SetRemoteRevision records the remote revision marker for conceptID+connectorName.
+func (sm *StateManager) SetRemoteRevision(conceptID, connectorName, rev string) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	sm.conceptState(conceptID).RemoteRevisions[connectorName] = rev
+}
+
+// GetLastPulledHashFor returns the last pulled hash for conceptID from connectorName
+// (falling back to the scalar LastPulledHash for backward compatibility).
+func (sm *StateManager) GetLastPulledHashFor(conceptID, connectorName string) string {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+	if cs, ok := sm.state.Concepts[conceptID]; ok {
+		if h, exists := cs.LastPulledHashes[connectorName]; exists {
+			return h
+		}
+		return cs.LastPulledHash
+	}
+	return ""
+}
+
+// SetLastPulledHashFor records the last pulled hash for conceptID from connectorName.
+func (sm *StateManager) SetLastPulledHashFor(conceptID, connectorName, hash string) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	cs := sm.conceptState(conceptID)
+	cs.LastPulledHash = hash
+	cs.LastPulledHashes[connectorName] = hash
+}
+
+// FindConceptByExternalID performs a reverse lookup from (connectorName, externalID) to conceptID.
+func (sm *StateManager) FindConceptByExternalID(connectorName, externalID string) string {
+	if externalID == "" {
+		return ""
+	}
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+	for conceptID, cs := range sm.state.Concepts {
+		if cs != nil && cs.ExternalIDs[connectorName] == externalID {
+			return conceptID
+		}
+	}
+	return ""
 }
 
 // ─── Global accessors ─────────────────────────────────────────────────────────

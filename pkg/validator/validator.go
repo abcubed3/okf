@@ -46,13 +46,21 @@ type Issue struct {
 
 // Options configure the validator.
 type Options struct {
-	Host   string
-	APIKey string
+	Host       string
+	APIKey     string
+	HTTPClient *http.Client
+}
+
+// remoteBundleEntry caches the result of fetching a remote bundle's concepts,
+// distinguishing unreachable/auth failures from confirmed empty or 404 responses.
+type remoteBundleEntry struct {
+	concepts    map[string]bool
+	unreachable bool
+	errMsg      string
 }
 
 // remoteCache stores fetched concepts per bundle ID to avoid repeated network calls.
-// Using a map keyed by bundle ID, containing a map of concept IDs.
-type remoteCache map[string]map[string]bool
+type remoteCache map[string]remoteBundleEntry
 
 // ValidateBundle performs OKF conformance checks on a bundle, verifying frontmatter structures and links.
 func ValidateBundle(b *bundle.Bundle, opts Options) []Issue {
@@ -62,8 +70,17 @@ func ValidateBundle(b *bundle.Bundle, opts Options) []Issue {
 		issues = append(issues, ValidateConcept(c, b, opts, rcache)...)
 	}
 	for _, idx := range b.IndexFiles {
+		if idx.ParseError != "" {
+			issues = append(issues, Issue{
+				ConceptID: idx.ID,
+				Path:      idx.Path,
+				Severity:  SeverityError,
+				Message:   idx.ParseError,
+			})
+			continue
+		}
 		issues = append(issues, validateLinks(idx, b, opts, rcache)...)
-		issues = append(issues, validateCitations(idx, b)...)
+		issues = append(issues, validateCitations(idx, b, opts, rcache)...)
 	}
 
 	sort.Slice(issues, func(i, j int) bool {
@@ -128,7 +145,7 @@ func ValidateConcept(c *bundle.Concept, b *bundle.Bundle, opts Options, rcache r
 	issues = append(issues, linkIssues...)
 
 	// 4. Citation validation
-	citationIssues := validateCitations(c, b)
+	citationIssues := validateCitations(c, b, opts, rcache)
 	issues = append(issues, citationIssues...)
 
 	// 5. OKF v0.2 Trust Signals & Attestation validation
@@ -294,78 +311,7 @@ func validateLinks(c *bundle.Concept, b *bundle.Bundle, opts Options, rcache rem
 
 		// Handle remote hub:// links
 		if strings.HasPrefix(target, "hub://") {
-			if opts.Host == "" {
-				// Offline mode or no host configured, we cannot validate
-				continue
-			}
-
-			// target is like hub://stripe/api/charge or hub://postgres/ops
-			uri := strings.TrimPrefix(target, "hub://")
-			parts := strings.Split(uri, "/")
-			if len(parts) < 2 {
-				// Require at least a bundle ID that has a namespace/name format, wait.
-				// For the prototype, our bundle IDs are "stripe/api" which is 2 parts.
-				// A concept inside it would be "stripe/api/charge" (3 parts).
-				// We'll just assume the last part is the concept ID, and everything before is bundle ID,
-				// or if it's just 2 parts, it's just a bundle link.
-				continue // skip complex parsing validation if malformed for now
-			}
-
-			var bundleID, conceptID string
-			if len(parts) > 2 {
-				conceptID = parts[len(parts)-1]
-				bundleID = strings.Join(parts[:len(parts)-1], "/")
-			} else {
-				// It's a link to a bundle, not a concept. Let's just validate the bundle exists.
-				bundleID = strings.Join(parts, "/")
-			}
-
-			// Check cache
-			conceptSet, ok := rcache[bundleID]
-			if !ok {
-				// Fetch from Hub
-				apiURL := fmt.Sprintf("%s/api/concepts?bundle=%s", opts.Host, url.QueryEscape(bundleID))
-				conceptSet = make(map[string]bool)
-				if req, reqErr := http.NewRequest("GET", apiURL, nil); reqErr == nil {
-					if opts.APIKey != "" {
-						req.Header.Set("Authorization", "Bearer "+opts.APIKey)
-					}
-					client := &http.Client{Timeout: 5 * time.Second}
-					resp, err := client.Do(req)
-					if err == nil && resp.StatusCode == http.StatusOK {
-						var concepts []struct {
-							ID string `json:"id"`
-						}
-						if err := json.NewDecoder(resp.Body).Decode(&concepts); err == nil {
-							for _, remC := range concepts {
-								conceptSet[remC.ID] = true
-							}
-						}
-					}
-					if resp != nil {
-						resp.Body.Close()
-					}
-				}
-				// Cache even on failure so we don't spam the network
-				rcache[bundleID] = conceptSet
-			}
-
-			if conceptID != "" && !conceptSet[conceptID] {
-				issues = append(issues, Issue{
-					ConceptID: c.ID,
-					Path:      c.Path,
-					Severity:  SeverityError,
-					Message:   fmt.Sprintf("broken remote link: concept '%s' not found in remote bundle '%s'", conceptID, bundleID),
-				})
-			} else if conceptID == "" && len(conceptSet) == 0 {
-				issues = append(issues, Issue{
-					ConceptID: c.ID,
-					Path:      c.Path,
-					Severity:  SeverityWarning,
-					Message:   fmt.Sprintf("remote bundle '%s' could not be resolved or is empty", bundleID),
-				})
-			}
-
+			issues = append(issues, validateHubTarget(c, target, opts, rcache)...)
 			continue
 		}
 
@@ -426,8 +372,116 @@ func extractLinksFromAST(body string) []string {
 	return targets
 }
 
-// validateCitations verifies that any local/internal citation links resolve to existing concepts in the bundle.
-func validateCitations(c *bundle.Concept, b *bundle.Bundle) []Issue {
+func validateHubTarget(c *bundle.Concept, target string, opts Options, rcache remoteCache) []Issue {
+	var issues []Issue
+
+	bundleID, conceptID, parseErr := links.ParseHubURI(target)
+	if parseErr != nil {
+		issues = append(issues, Issue{
+			ConceptID: c.ID,
+			Path:      c.Path,
+			Severity:  SeverityError,
+			Message:   fmt.Sprintf("malformed hub:// URI '%s': %v", target, parseErr),
+		})
+		return issues
+	}
+
+	if opts.Host == "" {
+		// Offline mode or no host configured, we cannot validate remote existence
+		return issues
+	}
+
+	entry, ok := rcache[bundleID]
+	if !ok {
+		entry = fetchRemoteBundle(opts, bundleID)
+		rcache[bundleID] = entry
+	}
+
+	if entry.unreachable {
+		issues = append(issues, Issue{
+			ConceptID: c.ID,
+			Path:      c.Path,
+			Severity:  SeverityWarning,
+			Message:   fmt.Sprintf("unable to verify remote link '%s' (%s)", target, entry.errMsg),
+		})
+		return issues
+	}
+
+	if conceptID != "" && !entry.concepts[conceptID] {
+		issues = append(issues, Issue{
+			ConceptID: c.ID,
+			Path:      c.Path,
+			Severity:  SeverityError,
+			Message:   fmt.Sprintf("broken remote link: concept '%s' not found in remote bundle '%s'", conceptID, bundleID),
+		})
+	} else if conceptID == "" && len(entry.concepts) == 0 {
+		issues = append(issues, Issue{
+			ConceptID: c.ID,
+			Path:      c.Path,
+			Severity:  SeverityWarning,
+			Message:   fmt.Sprintf("remote bundle '%s' could not be resolved or is empty", bundleID),
+		})
+	}
+
+	return issues
+}
+
+func fetchRemoteBundle(opts Options, bundleID string) remoteBundleEntry {
+	apiURL := fmt.Sprintf("%s/api/concepts?bundle=%s", strings.TrimRight(opts.Host, "/"), url.QueryEscape(bundleID))
+	req, reqErr := http.NewRequest("GET", apiURL, nil)
+	if reqErr != nil {
+		return remoteBundleEntry{unreachable: true, errMsg: reqErr.Error()}
+	}
+	if opts.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+opts.APIKey)
+	}
+	client := opts.HTTPClient
+	if client == nil {
+		client = &http.Client{Timeout: 5 * time.Second}
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return remoteBundleEntry{unreachable: true, errMsg: err.Error()}
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return remoteBundleEntry{concepts: make(map[string]bool)}
+	}
+	if resp.StatusCode != http.StatusOK {
+		return remoteBundleEntry{unreachable: true, errMsg: fmt.Sprintf("HTTP %d", resp.StatusCode)}
+	}
+
+	var concepts []struct {
+		ID string `json:"id"`
+	}
+	var wrapper struct {
+		Concepts *[]struct {
+			ID string `json:"id"`
+		} `json:"concepts"`
+	}
+	dec := json.NewDecoder(resp.Body)
+	var raw json.RawMessage
+	if err := dec.Decode(&raw); err != nil {
+		return remoteBundleEntry{unreachable: true, errMsg: err.Error()}
+	}
+	conceptSet := make(map[string]bool)
+	if err := json.Unmarshal(raw, &wrapper); err == nil && wrapper.Concepts != nil {
+		for _, remC := range *wrapper.Concepts {
+			conceptSet[remC.ID] = true
+		}
+	} else if err := json.Unmarshal(raw, &concepts); err == nil {
+		for _, remC := range concepts {
+			conceptSet[remC.ID] = true
+		}
+	} else {
+		return remoteBundleEntry{unreachable: true, errMsg: "invalid JSON response"}
+	}
+	return remoteBundleEntry{concepts: conceptSet}
+}
+
+// validateCitations verifies that any local/internal or hub:// citation links resolve to existing concepts.
+func validateCitations(c *bundle.Concept, b *bundle.Bundle, opts Options, rcache remoteCache) []Issue {
 	var issues []Issue
 
 	for _, cite := range c.Citations {
@@ -440,6 +494,11 @@ func validateCitations(c *bundle.Concept, b *bundle.Bundle) []Issue {
 
 		// Ignore links with anchors only in the same file (e.g. #section-name)
 		if strings.HasPrefix(target, "#") {
+			continue
+		}
+
+		if strings.HasPrefix(target, "hub://") {
+			issues = append(issues, validateHubTarget(c, target, opts, rcache)...)
 			continue
 		}
 

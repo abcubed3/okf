@@ -11,7 +11,7 @@ This guide provides step-by-step instructions for publishing and releasing the *
 2. **Root `action.yml`:** The `action.yml` file must reside in the root of the default branch (`main`).
 3. **Branding & Description:** Ensure `action.yml` contains `name`, `description`, `author`, and `branding` fields:
    ```yaml
-   name: 'OKF Lint'
+   name: 'OKFgo Lint'
    description: 'Lint and validate Open Knowledge Format (OKF) markdown bundles for specification conformance and broken links.'
    author: 'abcubed3'
    branding:
@@ -38,7 +38,7 @@ This guide provides step-by-step instructions for publishing and releasing the *
 1. Write release notes or click **Generate release notes**.
 2. Click **Publish release**.
 3. GitHub will validate the Action metadata and publish your Action live to the GitHub Marketplace at:
-   `https://github.com/marketplace/actions/okf-lint`
+   `https://github.com/marketplace/actions/okfgo-lint`
 
 ### Step 4: Maintain Major Version Floating Tags (`v1`)
 GitHub Action best practices recommend providing a floating major version tag (e.g. `v1`) so users can pin `uses: abcubed3/okf@v1` and automatically receive non-breaking patch/minor updates.

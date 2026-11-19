@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 )
 
@@ -19,8 +21,22 @@ type Event struct {
 	Params map[string]string `json:"params"`
 }
 
+// IsDisabled reports whether telemetry is disabled via OKF_TELEMETRY_DISABLED or DO_NOT_TRACK.
+func IsDisabled() bool {
+	if v := strings.TrimSpace(os.Getenv("OKF_TELEMETRY_DISABLED")); v == "1" || strings.EqualFold(v, "true") || strings.EqualFold(v, "yes") {
+		return true
+	}
+	if v := strings.TrimSpace(os.Getenv("DO_NOT_TRACK")); v == "1" || strings.EqualFold(v, "true") || strings.EqualFold(v, "yes") {
+		return true
+	}
+	return false
+}
+
 // SendEvent asynchronously sends an anonymous telemetry event to the OKF Hub proxy.
 func SendEvent(eventName, bundleName string) {
+	if IsDisabled() {
+		return
+	}
 	go func() {
 		payload := TelemetryPayload{
 			ClientID: "anonymous_cli_user",

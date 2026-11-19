@@ -12,7 +12,7 @@ Package `pull` downloads Open Knowledge Format (OKF) concepts for a `hub://` bun
 - `[pull.go:PullBundle]` — Enforces a 10-second HTTP client timeout (`10 * time.Second`), attaches `Authorization: Bearer <apiKey>` only when `apiKey != ""`, and requires HTTP status `200 OK` (`http.StatusOK`).
 - `[pull.go:PullBundle]` — Attempts JSON unmarshaling first as a wrapped object `{"concepts": *[]ConceptResponse}` (handling empty wrapped `{"concepts": []}` via `wrapper.Concepts != nil`), falling back to a flat `[]ConceptResponse` array.
 - `[pull.go:PullBundle]` — Returns `nil` without creating directories or writing files when the decoded `concepts` slice is empty (`len(concepts) == 0`).
-- `[pull.go:PullBundle]` — Writes concepts relative to the current working directory under `bundleID` (`filepath.Join(absCacheDir, c.ID+".md")`) after enforcing path-containment (`strings.HasPrefix(filePath, absCacheDir+string(os.PathSeparator))`), logging and continuing past per-concept path-containment, YAML marshal, directory creation, or file write errors rather than aborting.
+- `[pull.go:PullBundle]` — Writes concepts relative to the current working directory under `bundleID` (`filepath.Join(absCacheDir, filepath.FromSlash(c.ID)+".md")`) after enforcing path-containment (`strings.HasPrefix(filePath, absCacheDir+string(os.PathSeparator))`), logging and continuing past per-concept path-containment, YAML marshal, directory creation, or file write errors rather than aborting.
 
 ## Side Effects
 - `[pull.go:PullBundle]` — Sends an outbound HTTP `GET` request to `fmt.Sprintf("%s/api/concepts?bundle=%s", host, url.QueryEscape(bundleID))`.

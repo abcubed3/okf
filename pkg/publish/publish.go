@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/abcubed3/okf/pkg/assembly"
+	"github.com/abcubed3/okf/pkg/bundle"
+	"github.com/abcubed3/okf/pkg/internal/links"
 	"github.com/abcubed3/okf/pkg/parser"
 )
 
@@ -45,6 +47,33 @@ type PublishConcept struct {
 
 // PublishBundle validates, packages, and pushes a bundle to the OKF Hub.
 func PublishBundle(bundlePath, host, apiKey string) error {
+	return PublishBundleWithID(bundlePath, "", host, apiKey)
+}
+
+// ResolveBundleID determines and validates the canonical <org>/<bundle> Hub ID
+// from an explicit flag value or the root index.md frontmatter 'id' field.
+func ResolveBundleID(b *bundle.Bundle, explicitID string) (string, error) {
+	rawID := strings.TrimSpace(explicitID)
+	if rawID == "" && b != nil {
+		if idx, ok := b.IndexFiles["index.md"]; ok && idx != nil && idx.Frontmatter.Extra != nil {
+			if idVal, ok := idx.Frontmatter.Extra["id"].(string); ok {
+				rawID = strings.TrimSpace(idVal)
+			}
+		}
+	}
+	if rawID == "" {
+		return "", fmt.Errorf("bundle ID is required in canonical <org>/<bundle> format: pass --id <org/bundle> or set 'id: <org/bundle>' in root index.md")
+	}
+	canonicalID, err := links.ParseBundleID(rawID)
+	if err != nil {
+		return "", fmt.Errorf("%w (pass --id <org/bundle> or set 'id: <org/bundle>' in root index.md)", err)
+	}
+	return canonicalID, nil
+}
+
+// PublishBundleWithID validates, packages, and pushes a bundle to the OKF Hub using an explicit
+// or root index.md-declared canonical <org>/<bundle> ID.
+func PublishBundleWithID(bundlePath, bundleID, host, apiKey string) error {
 	localPath, cleanup, err := parser.ResolvePath(bundlePath)
 	if err != nil {
 		return fmt.Errorf("failed to resolve bundle path: %w", err)
@@ -64,14 +93,17 @@ func PublishBundle(bundlePath, host, apiKey string) error {
 		return fmt.Errorf("failed to parse bundle: %w", err)
 	}
 
-	bundleName := filepath.Base(b.Path)
+	canonicalID, err := ResolveBundleID(b, bundleID)
+	if err != nil {
+		return err
+	}
 
 	// 2. Map to PublishPayload (matches proto structure)
 	payload := PublishPayload{
 		Bundle: BundlePayload{
-			ID:          bundleName, // Using the bundle name as the ID in the prototype
-			Name:        bundleName,
-			Description: "Published OKF Bundle: " + bundleName,
+			ID:          canonicalID,
+			Name:        canonicalID,
+			Description: "Published OKF Bundle: " + canonicalID,
 			Concepts:    make([]PublishConcept, 0, len(b.Concepts)),
 			Links:       make([]GraphEdge, 0),
 		},

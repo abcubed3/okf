@@ -593,6 +593,11 @@ type AssembleContextResult struct {
 	Nodes           []assembly.NodeStat `json:"nodes"`
 }
 
+const (
+	maxServerDepth = 10
+	maxServerChars = 200000
+)
+
 // handleAssembleContext builds a pruned, cohesive context subset starting from a concept ID.
 func (s *Server) handleAssembleContext(ctx context.Context, req *sdk.CallToolRequest, args AssembleContextArgs) (*sdk.CallToolResult, AssembleContextResult, error) {
 	s.mu.RLock()
@@ -601,14 +606,26 @@ func (s *Server) handleAssembleContext(ctx context.Context, req *sdk.CallToolReq
 	opts := assembly.DefaultOptions()
 
 	if args.Depth != nil {
-		opts.MaxDepth = *args.Depth
+		d := *args.Depth
+		if d < 0 {
+			d = 0
+		} else if d > maxServerDepth {
+			d = maxServerDepth
+		}
+		opts.MaxDepth = d
 	}
 	if args.Direction != nil {
 		opts.Direction = assembly.Direction(*args.Direction)
 	}
 	if args.MaxChars != nil {
-		opts.MaxCharacters = *args.MaxChars
-		opts.MaxTokens = *args.MaxChars / 4
+		mc := *args.MaxChars
+		if mc < 1 {
+			mc = 1
+		} else if mc > maxServerChars {
+			mc = maxServerChars
+		}
+		opts.MaxCharacters = mc
+		opts.MaxTokens = mc / 4
 	}
 	if args.Format != nil {
 		opts.Format = *args.Format
@@ -729,6 +746,11 @@ func (s *Server) handleAskKnowledgeBase(ctx context.Context, req *sdk.CallToolRe
 	depth := 2
 	if args.Depth != nil {
 		depth = *args.Depth
+		if depth < 0 {
+			depth = 0
+		} else if depth > maxServerDepth {
+			depth = maxServerDepth
+		}
 	}
 
 	opts := ai.AskOptions{

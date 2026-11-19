@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/abcubed3/okf/pkg/internal/links"
 	"gopkg.in/yaml.v3"
 )
 
@@ -25,18 +26,10 @@ type ConceptResponse struct {
 
 // PullBundle downloads a remote bundle into the local .okf_cache directory
 func PullBundle(hubURI, host, apiKey string) error {
-	// Parse hub://<bundle_id>
-	if !strings.HasPrefix(hubURI, "hub://") {
-		return fmt.Errorf("invalid URI format: must start with hub://")
+	bundleID, _, err := links.ParseHubURI(hubURI)
+	if err != nil {
+		return err
 	}
-
-	bundleID := strings.TrimSpace(strings.TrimPrefix(hubURI, "hub://"))
-	if bundleID == "" {
-		return fmt.Errorf("invalid URI format: bundle ID cannot be empty")
-	}
-	// If it has multiple segments, assume the first segment is the bundle ID for now.
-	// Actually, based on previous design, bundleID can be "namespace/bundle" like "stripe/api"
-	// So we pass the entire remainder as the bundleID.
 
 	apiURL := fmt.Sprintf("%s/api/concepts?bundle=%s", host, url.QueryEscape(bundleID))
 

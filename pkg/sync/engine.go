@@ -1,4 +1,3 @@
-// Package sync implements the OKF synchronization engine and connectors for external systems.
 package sync
 
 import (
@@ -7,11 +6,12 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"reflect"
 	"syscall"
 	"time"
 
 	"github.com/abcubed3/okf/pkg/bundle"
-	"github.com/abcubed3/okf/pkg/harvester"
 	"github.com/abcubed3/okf/pkg/parser"
 )
 
@@ -21,41 +21,76 @@ type conceptEntry struct {
 	hash    string
 }
 
+// SyncOptions configures a sync engine run.
+type SyncOptions struct {
+	BundlePath string
+	ConfigPath string
+	Daemon     bool
+	Interval   int
+	DryRun     bool
+}
+
 // Engine orchestrates the sync process across all registered connectors.
 type Engine struct {
 	bundlePath string
 	config     *Config
 	state      *StateManager
 	connectors []Connector
+	dryRun     bool
+	daemon     bool
 }
 
 // Run is the entrypoint for starting the sync engine.
-// It loads config and state, registers all connectors, and starts the sync loop.
+// It loads config and state, registers configured connectors, and starts the sync loop.
 func Run(bundlePath, configPath string, daemon bool, interval int) error {
-	cfg, err := LoadConfig(configPath)
+	return RunWithOptions(SyncOptions{
+		BundlePath: bundlePath,
+		ConfigPath: configPath,
+		Daemon:     daemon,
+		Interval:   interval,
+	})
+}
+
+// RunWithOptions starts the sync engine with explicit SyncOptions (including DryRun).
+func RunWithOptions(opts SyncOptions) error {
+	cfg, err := LoadConfig(opts.ConfigPath)
 	if err != nil {
 		return fmt.Errorf("failed to load sync configuration: %w", err)
 	}
 
-	state := NewStateManager(bundlePath)
+	state := NewStateManager(opts.BundlePath)
 	if err := state.Load(); err != nil {
 		log.Printf("Warning: failed to load state, starting fresh: %v", err)
 	}
 
 	eng := &Engine{
-		bundlePath: bundlePath,
+		bundlePath: opts.BundlePath,
 		config:     cfg,
 		state:      state,
+		dryRun:     opts.DryRun,
+		daemon:     opts.Daemon,
 	}
 
-	// Register connectors in priority order.
-	eng.Register(NewGoogleDriveConnector(state))
-	eng.Register(NewNotionConnector(state))
-	eng.Register(NewConfluenceConnector(state))
-	eng.Register(NewJiraConnector(state))
-	eng.Register(NewGitConnector(state))
+	// Register only configured connectors in priority order.
+	if cfg.Connectors.GoogleDrive != nil {
+		gd := NewGoogleDriveConnector(state)
+		gd.daemon = opts.Daemon
+		eng.Register(gd)
+	}
+	if cfg.Connectors.Notion != nil {
+		eng.Register(NewNotionConnector(state))
+	}
+	if cfg.Connectors.Confluence != nil {
+		eng.Register(NewConfluenceConnector(state))
+	}
+	if cfg.Connectors.Jira != nil {
+		eng.Register(NewJiraConnector(state))
+	}
+	if cfg.Connectors.Git != nil {
+		eng.Register(NewGitConnector(state))
+	}
 
-	return eng.Start(daemon, interval)
+	return eng.Start(opts.Daemon, opts.Interval)
 }
 
 // Register adds a Connector to the engine's active connector list.
@@ -63,14 +98,14 @@ func (e *Engine) Register(c Connector) {
 	e.connectors = append(e.connectors, c)
 }
 
-// Start initialises all connectors and then either runs once or loops as a daemon.
+// Start initialises all configured connectors and then either runs once or loops as a daemon.
 func (e *Engine) Start(daemon bool, interval int) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	for _, c := range e.connectors {
 		if err := c.Initialize(ctx, e.config); err != nil {
-			log.Printf("Warning: Failed to initialize connector %s (might be unconfigured): %v", c.Name(), err)
+			return fmt.Errorf("failed to initialize configured connector %s: %w", c.Name(), err)
 		}
 	}
 
@@ -82,7 +117,6 @@ func (e *Engine) Start(daemon bool, interval int) error {
 	ticker := time.NewTicker(time.Duration(interval) * time.Second)
 	defer ticker.Stop()
 
-	// Run immediately, then on each tick.
 	if err := e.syncOnce(ctx); err != nil {
 		log.Printf("Error during initial sync: %v", err)
 	}
@@ -100,18 +134,44 @@ func (e *Engine) Start(daemon bool, interval int) error {
 	}
 }
 
-// syncOnce runs a single full push→pull sync cycle across all connectors.
+func (e *Engine) includeFilterFor(name string) *IncludeFilter {
+	if e.config == nil {
+		return nil
+	}
+	switch name {
+	case "google_drive":
+		if e.config.Connectors.GoogleDrive != nil {
+			return e.config.Connectors.GoogleDrive.Include
+		}
+	case "notion":
+		if e.config.Connectors.Notion != nil {
+			return e.config.Connectors.Notion.Include
+		}
+	case "confluence":
+		if e.config.Connectors.Confluence != nil {
+			return e.config.Connectors.Confluence.Include
+		}
+	case "jira":
+		if e.config.Connectors.Jira != nil {
+			return e.config.Connectors.Jira.Include
+		}
+	case "git":
+		if e.config.Connectors.Git != nil {
+			return e.config.Connectors.Git.Include
+		}
+	}
+	return nil
+}
+
+// syncOnce runs a single full push->pull sync cycle across all configured connectors.
 func (e *Engine) syncOnce(ctx context.Context) error {
 	log.Println("Starting sync cycle...")
 
-	// 1. Parse the local bundle.
 	parsedBundle, err := parser.ParseBundle(ctx, e.bundlePath)
 	if err != nil {
 		return fmt.Errorf("failed to parse local bundle: %w", err)
 	}
 
-	// Pre-compute content hashes for all valid local concepts.
-	// Done once here — cost is O(concepts), not O(concepts × connectors).
 	var localConcepts []conceptEntry
 	for _, concept := range parsedBundle.Concepts {
 		if concept.ParseError != "" {
@@ -125,37 +185,36 @@ func (e *Engine) syncOnce(ctx context.Context) error {
 		localConcepts = append(localConcepts, conceptEntry{concept, hash})
 	}
 
-	// 2. Push to each connector, skipping unchanged concepts (per-connector).
 	for _, c := range e.connectors {
 		e.pushToConnector(ctx, c, localConcepts)
 	}
 
-	// 3. Pull from each connector, skipping concepts whose content hasn't changed.
 	for _, c := range e.connectors {
-		e.pullFromConnector(ctx, c)
+		e.pullFromConnector(ctx, c, parsedBundle)
 	}
 
-	// 4. Persist state.
-	e.state.UpdateLastSync(time.Now().UTC())
-	if err := e.state.Save(); err != nil {
-		log.Printf("Failed to save sync state: %v", err)
+	if !e.dryRun {
+		e.state.UpdateLastSync(time.Now().UTC())
+		if err := e.state.Save(); err != nil {
+			log.Printf("Failed to save sync state: %v", err)
+		}
 	}
 
 	log.Println("Sync cycle complete.")
 	return nil
 }
 
-// pushToConnector pushes only the concepts whose content hash has changed since
-// the last successful push to this connector. On success it commits the new hash.
 func (e *Engine) pushToConnector(ctx context.Context, c Connector, entries []conceptEntry) {
-	// Filter to concepts that need pushing for this specific connector.
+	filter := e.includeFilterFor(c.Name())
 	var toSync []*bundle.Concept
 	var syncHashes []string
 
 	for _, entry := range entries {
+		if !filter.Matches(entry.concept) {
+			continue
+		}
 		stored := e.state.GetContentHash(entry.concept.ID, c.Name())
 		if stored == entry.hash {
-			// Content identical to last push — nothing to do.
 			continue
 		}
 		toSync = append(toSync, entry.concept)
@@ -167,69 +226,91 @@ func (e *Engine) pushToConnector(ctx context.Context, c Connector, entries []con
 		return
 	}
 
-	log.Printf("[%s] Pushing %d changed concept(s)...", c.Name(), len(toSync))
-	if err := c.Push(ctx, toSync); err != nil {
-		log.Printf("[%s] Failed to push concepts: %v", c.Name(), err)
-		// Do NOT update hashes — the push failed, so we must retry next cycle.
+	if e.dryRun {
+		log.Printf("[%s] [dry-run] Would push %d concept(s).", c.Name(), len(toSync))
 		return
 	}
 
-	// Only commit the new hashes after a confirmed successful push.
+	log.Printf("[%s] Pushing %d changed concept(s)...", c.Name(), len(toSync))
+	if err := c.Push(ctx, toSync); err != nil {
+		log.Printf("[%s] Failed to push concepts: %v", c.Name(), err)
+		return
+	}
+
 	for i, concept := range toSync {
-		e.state.SetContentHash(concept.ID, c.Name(), syncHashes[i])
+		if e.state.GetContentHash(concept.ID, c.Name()) != syncHashes[i] {
+			e.state.SetContentHash(concept.ID, c.Name(), syncHashes[i])
+		}
 	}
 	log.Printf("[%s] Push complete. %d concept(s) updated.", c.Name(), len(toSync))
 }
 
-// pullFromConnector fetches remote updates and writes only concepts whose content
-// has changed since the last pull (pull-side deduplication).
-func (e *Engine) pullFromConnector(ctx context.Context, c Connector) {
+func (e *Engine) pullFromConnector(ctx context.Context, c Connector, localBundle *bundle.Bundle) {
 	pulled, err := c.Pull(ctx)
 	if err != nil {
 		log.Printf("[%s] Failed to pull updates: %v", c.Name(), err)
 		return
 	}
-
 	if len(pulled) == 0 {
 		return
 	}
 
-	// Filter out concepts whose content matches what we last wrote.
-	var toWrite []*bundle.Concept
-	var writeHashes []string
+	writeBundle := bundle.NewBundle(e.bundlePath)
+	var writeHashes = make(map[string]string)
 
 	for _, concept := range pulled {
+		if concept == nil || concept.ID == "" {
+			continue
+		}
+		if concept.Path == "" {
+			concept.Path = filepath.FromSlash(concept.ID) + ".md"
+		}
+
+		// Merge legacy body onto existing local frontmatter if pulled doc had no okf-frontmatter block,
+		// and clear Verified if remote content changed without a new verifier entry.
+		if localBundle != nil {
+			if localC, exists := localBundle.GetConcept(concept.ID); exists && localC != nil {
+				if concept.Frontmatter.Type == "" && localC.Frontmatter.Type != "" {
+					mergedFm := localC.Frontmatter
+					concept.Frontmatter = mergedFm
+				}
+				contentChanged := concept.Body != localC.Body || concept.Frontmatter.Computation != localC.Frontmatter.Computation
+				if contentChanged && reflect.DeepEqual(concept.Frontmatter.Verified, localC.Frontmatter.Verified) {
+					concept.Frontmatter.Verified = nil
+				}
+			}
+		}
+
 		hash, err := HashConcept(concept)
 		if err != nil {
 			log.Printf("[%s] Warning: failed to hash pulled concept %s, writing anyway: %v", c.Name(), concept.ID, err)
-			toWrite = append(toWrite, concept)
-			writeHashes = append(writeHashes, "")
+		} else if e.state.GetLastPulledHashFor(concept.ID, c.Name()) == hash {
 			continue
 		}
-		if e.state.GetLastPulledHash(concept.ID) == hash {
-			// Content is identical to what's already on disk — skip the write.
-			continue
-		}
-		toWrite = append(toWrite, concept)
-		writeHashes = append(writeHashes, hash)
+
+		writeBundle.Concepts[concept.ID] = concept
+		writeHashes[concept.ID] = hash
 	}
 
-	if len(toWrite) == 0 {
+	if len(writeBundle.Concepts) == 0 {
 		log.Printf("[%s] Pulled %d concept(s), all already up-to-date on disk.", c.Name(), len(pulled))
 		return
 	}
 
-	log.Printf("[%s] Writing %d updated concept(s) to local bundle...", c.Name(), len(toWrite))
-	if err := harvester.WriteConcepts(toWrite, e.bundlePath); err != nil {
-		log.Printf("[%s] Failed to write pulled concepts: %v", c.Name(), err)
-		// Do NOT commit hashes — next cycle will retry.
+	if e.dryRun {
+		log.Printf("[%s] [dry-run] Would write %d pulled concept(s) to disk.", c.Name(), len(writeBundle.Concepts))
 		return
 	}
 
-	// Commit pull-side hashes after successful write.
-	for _, concept := range toWrite {
-		if hash, err := HashConcept(concept); err == nil {
-			e.state.SetLastPulledHash(concept.ID, hash)
+	log.Printf("[%s] Writing %d updated concept(s) to local bundle...", c.Name(), len(writeBundle.Concepts))
+	if err := bundle.WriteBundle(writeBundle, e.bundlePath); err != nil {
+		log.Printf("[%s] Failed to write pulled concepts: %v", c.Name(), err)
+		return
+	}
+
+	for id, hash := range writeHashes {
+		if hash != "" {
+			e.state.SetLastPulledHashFor(id, c.Name(), hash)
 		}
 	}
 }

@@ -76,12 +76,45 @@ func Diff(oldB, newB *Bundle) (*BundleDiff, error) {
 		}
 	}
 
+	// 3. Check IndexFiles for additions, modifications, and deletions
+	for relPath, newIdx := range newB.IndexFiles {
+		oldIdx, exists := oldB.IndexFiles[relPath]
+		if !exists {
+			diff.Changes = append(diff.Changes, ConceptDiff{
+				ID:   relPath,
+				Type: DiffAdded,
+			})
+			continue
+		}
+		bodyDrift := newIdx.Body != oldIdx.Body
+		fmDiffs := compareFrontmatter(oldIdx.Frontmatter, newIdx.Frontmatter)
+		if bodyDrift || len(fmDiffs) > 0 {
+			diff.Changes = append(diff.Changes, ConceptDiff{
+				ID:        relPath,
+				Type:      DiffModified,
+				FmDiffs:   fmDiffs,
+				BodyDrift: bodyDrift,
+			})
+		}
+	}
+	for relPath := range oldB.IndexFiles {
+		if _, exists := newB.IndexFiles[relPath]; !exists {
+			diff.Changes = append(diff.Changes, ConceptDiff{
+				ID:   relPath,
+				Type: DiffDeleted,
+			})
+		}
+	}
+
 	return diff, nil
 }
 
 func compareFrontmatter(oldFm, newFm Frontmatter) map[string]FieldDiff {
 	diffs := make(map[string]FieldDiff)
 
+	if oldFm.OKFVersion != newFm.OKFVersion {
+		diffs["okf_version"] = FieldDiff{OldValue: oldFm.OKFVersion, NewValue: newFm.OKFVersion}
+	}
 	if oldFm.Type != newFm.Type {
 		diffs["type"] = FieldDiff{OldValue: oldFm.Type, NewValue: newFm.Type}
 	}
@@ -100,6 +133,40 @@ func compareFrontmatter(oldFm, newFm Frontmatter) map[string]FieldDiff {
 
 	if !slicesEqual(oldFm.Tags, newFm.Tags) {
 		diffs["tags"] = FieldDiff{OldValue: oldFm.Tags, NewValue: newFm.Tags}
+	}
+
+	if oldFm.Status != newFm.Status {
+		diffs["status"] = FieldDiff{OldValue: oldFm.Status, NewValue: newFm.Status}
+	}
+	if oldFm.StaleAfter != newFm.StaleAfter {
+		diffs["stale_after"] = FieldDiff{OldValue: oldFm.StaleAfter, NewValue: newFm.StaleAfter}
+	}
+	if !reflect.DeepEqual(oldFm.Sources, newFm.Sources) {
+		diffs["sources"] = FieldDiff{OldValue: oldFm.Sources, NewValue: newFm.Sources}
+	}
+	if !reflect.DeepEqual(oldFm.Generated, newFm.Generated) {
+		diffs["generated"] = FieldDiff{OldValue: oldFm.Generated, NewValue: newFm.Generated}
+	}
+	if !reflect.DeepEqual(oldFm.Verified, newFm.Verified) {
+		diffs["verified"] = FieldDiff{OldValue: oldFm.Verified, NewValue: newFm.Verified}
+	}
+	if oldFm.Runtime != newFm.Runtime {
+		diffs["runtime"] = FieldDiff{OldValue: oldFm.Runtime, NewValue: newFm.Runtime}
+	}
+	if !reflect.DeepEqual(oldFm.Parameters, newFm.Parameters) {
+		diffs["parameters"] = FieldDiff{OldValue: oldFm.Parameters, NewValue: newFm.Parameters}
+	}
+	if oldFm.Computation != newFm.Computation {
+		diffs["computation"] = FieldDiff{OldValue: oldFm.Computation, NewValue: newFm.Computation}
+	}
+	if !reflect.DeepEqual(oldFm.Executor, newFm.Executor) {
+		diffs["executor"] = FieldDiff{OldValue: oldFm.Executor, NewValue: newFm.Executor}
+	}
+	if !reflect.DeepEqual(oldFm.Attester, newFm.Attester) {
+		diffs["attester"] = FieldDiff{OldValue: oldFm.Attester, NewValue: newFm.Attester}
+	}
+	if !reflect.DeepEqual(oldFm.Attestation, newFm.Attestation) {
+		diffs["attestation"] = FieldDiff{OldValue: oldFm.Attestation, NewValue: newFm.Attestation}
 	}
 
 	// Compare Extra map

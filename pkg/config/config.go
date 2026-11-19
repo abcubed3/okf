@@ -8,7 +8,8 @@ import (
 )
 
 type Config struct {
-	APIKey string `json:"api_key"`
+	APIKey  string `json:"api_key"`
+	HubHost string `json:"hub_host,omitempty"`
 }
 
 // GetConfigPath returns the absolute path to the local config file (~/.okf/config.json).
@@ -87,4 +88,26 @@ func GetAPIKey(providedKey string) string {
 	}
 
 	return ""
+}
+
+// GetHost resolves the OKF Hub host URL in the following order:
+// 1. Provided flag/variable (if not empty)
+// 2. OKF_HUB_HOST environment variable
+// 3. ~/.okf/config.json (hub_host)
+// 4. Default ("https://okfgo.dev")
+func GetHost(providedHost string) string {
+	if providedHost != "" {
+		return providedHost
+	}
+
+	if envHost := os.Getenv("OKF_HUB_HOST"); envHost != "" {
+		return envHost
+	}
+
+	cfg, err := LoadConfig()
+	if err == nil && cfg.HubHost != "" {
+		return cfg.HubHost
+	}
+
+	return "https://okfgo.dev"
 }

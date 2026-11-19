@@ -10,9 +10,8 @@ The `okf assemble` command performs a deterministic Breadth-First Search (BFS) s
 
 ```bash
 # Assemble context for a specific table up to 10,000 characters
-okf assemble \
+okf assemble tables/users \
   --bundle ./okf-bundle \
-  --concept tables/users \
   --max-chars 10000 \
   --format xml
 ```

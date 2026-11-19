@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -27,6 +28,7 @@ type GoogleDriveConnector struct {
 	state  *StateManager
 	config *GoogleDriveConfig
 	srv    *drive.Service
+	daemon bool
 }
 
 func NewGoogleDriveConnector(state *StateManager) *GoogleDriveConnector {
@@ -84,6 +86,9 @@ func (c *GoogleDriveConnector) Initialize(ctx context.Context, cfg *Config) erro
 
 		tok, err := tokenFromFile(tokenFile)
 		if err != nil {
+			if c.daemon {
+				return fmt.Errorf("google_drive OAuth token missing (%s) and interactive browser auth is disabled in --daemon mode", tokenFile)
+			}
 			tok, err = getTokenFromWeb(oauthConfig)
 			if err != nil {
 				return fmt.Errorf("google_drive OAuth authorization failed: %w", err)
@@ -115,39 +120,63 @@ func (c *GoogleDriveConnector) Push(ctx context.Context, concepts []*bundle.Conc
 
 	for _, concept := range concepts {
 		extID := c.state.GetExternalID(concept.ID, c.Name())
-		content := concept.Body
+		content, err := SerializeConceptEnvelope(concept)
+		if err != nil {
+			log.Printf("[google_drive] Failed to serialize %s: %v", concept.ID, err)
+			continue
+		}
+		hash, _ := HashConcept(concept)
 		title := concept.Frontmatter.Title
 		if title == "" {
 			title = concept.ID
 		}
 
+		var appProps map[string]string
+		if len("okf_concept_id")+len(concept.ID) <= 124 {
+			appProps = map[string]string{"okf_concept_id": concept.ID}
+		}
+
 		if extID != "" {
-			// Update existing file
 			log.Printf("[google_drive] Updating concept %s (ID: %s) on Google Drive...", concept.ID, extID)
 			f := &drive.File{
-				Name: title,
+				Name:          title,
+				AppProperties: appProps,
 			}
-			_, err := c.srv.Files.Update(extID, f).Media(strings.NewReader(content)).Context(ctx).Do()
+			res, err := c.srv.Files.Update(extID, f).Media(strings.NewReader(content)).Fields("id, modifiedTime").Context(ctx).Do()
 			if err != nil {
-				log.Printf("failed to update file in drive: %v", err)
+				log.Printf("[google_drive] failed to update file %s: %v", extID, err)
+				continue
+			}
+			if hash != "" {
+				c.state.SetContentHash(concept.ID, c.Name(), hash)
+			}
+			if res.ModifiedTime != "" {
+				c.state.SetRemoteRevision(concept.ID, c.Name(), res.ModifiedTime)
 			}
 			continue
 		}
 
 		log.Printf("[google_drive] Pushing new concept %s (%s)...", concept.ID, title)
 		f := &drive.File{
-			Name:     title,
-			MimeType: "application/vnd.google-apps.document", // Convert to Google Doc
-			Parents:  []string{c.config.FolderID},
+			Name:          title,
+			MimeType:      "application/vnd.google-apps.document",
+			Parents:       []string{c.config.FolderID},
+			AppProperties: appProps,
 		}
 
-		res, err := c.srv.Files.Create(f).Media(strings.NewReader(content)).Context(ctx).Do()
+		res, err := c.srv.Files.Create(f).Media(strings.NewReader(content)).Fields("id, modifiedTime").Context(ctx).Do()
 		if err != nil {
-			log.Printf("failed to create file in drive: %v", err)
+			log.Printf("[google_drive] failed to create file for %s: %v", concept.ID, err)
 			continue
 		}
 
 		c.state.SetExternalID(concept.ID, c.Name(), res.Id)
+		if hash != "" {
+			c.state.SetContentHash(concept.ID, c.Name(), hash)
+		}
+		if res.ModifiedTime != "" {
+			c.state.SetRemoteRevision(concept.ID, c.Name(), res.ModifiedTime)
+		}
 	}
 	return nil
 }
@@ -158,38 +187,73 @@ func (c *GoogleDriveConnector) Pull(ctx context.Context) ([]*bundle.Concept, err
 	}
 	log.Printf("[google_drive] Pulling updates...")
 
-	// Default to a wide query if no last sync time
 	lastSync := c.state.GetLastSync()
 	lastSyncStr := lastSync.Format(time.RFC3339)
 	if lastSync.IsZero() {
-		// Just a fallback in case we want to pull all
 		lastSyncStr = time.Date(1970, 1, 1, 0, 0, 0, 0, time.UTC).Format(time.RFC3339)
 	}
 
 	query := fmt.Sprintf("'%s' in parents and modifiedTime > '%s' and trashed = false",
 		c.config.FolderID, lastSyncStr)
 
-	r, err := c.srv.Files.List().Q(query).Fields("nextPageToken, files(id, name, modifiedTime)").Context(ctx).Do()
-	if err != nil {
-		return nil, fmt.Errorf("unable to retrieve files: %v", err)
-	}
-
-	for _, i := range r.Files {
-		log.Printf("[google_drive] Found modified file: %s (%s)\n", i.Name, i.Id)
-		// Export as plain text
-		resp, err := c.srv.Files.Export(i.Id, "text/plain").Context(ctx).Download()
-		if err != nil {
-			log.Printf("[google_drive] Failed to download %s: %v", i.Id, err)
-			continue
+	var pulled []*bundle.Concept
+	pageToken := ""
+	for {
+		call := c.srv.Files.List().Q(query).Fields("nextPageToken, files(id, name, modifiedTime, appProperties)").Context(ctx)
+		if pageToken != "" {
+			call = call.PageToken(pageToken)
 		}
-		resp.Body.Close()
+		r, err := call.Do()
+		if err != nil {
+			return nil, fmt.Errorf("unable to retrieve files: %v", err)
+		}
 
-		// In a real implementation, we would figure out which local concept ID this matches
-		// (e.g., by scanning the state mappings backwards), and update the local `.md` file.
-		// For this prototype, we'll just log it.
+		for _, f := range r.Files {
+			conceptID := ""
+			if f.AppProperties != nil {
+				conceptID = f.AppProperties["okf_concept_id"]
+			}
+			if conceptID == "" {
+				conceptID = c.state.FindConceptByExternalID(c.Name(), f.Id)
+			}
+			if conceptID == "" {
+				conceptID = f.Name
+			}
+			if f.ModifiedTime != "" && c.state.GetRemoteRevision(conceptID, c.Name()) == f.ModifiedTime {
+				continue
+			}
+
+			resp, err := c.srv.Files.Export(f.Id, "text/plain").Context(ctx).Download()
+			if err != nil {
+				log.Printf("[google_drive] Failed to download %s (%s): %v", f.Name, f.Id, err)
+				continue
+			}
+			rawBytes, readErr := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024))
+			resp.Body.Close()
+			if readErr != nil {
+				log.Printf("[google_drive] Failed to read %s (%s): %v", f.Name, f.Id, readErr)
+				continue
+			}
+
+			concept, _, parseErr := ParseConceptEnvelope(conceptID, "", string(rawBytes))
+			if parseErr != nil {
+				log.Printf("[google_drive] Quarantine %s (%s): malformed okf-frontmatter YAML: %v", conceptID, f.Id, parseErr)
+				continue
+			}
+			c.state.SetExternalID(conceptID, c.Name(), f.Id)
+			if f.ModifiedTime != "" {
+				c.state.SetRemoteRevision(conceptID, c.Name(), f.ModifiedTime)
+			}
+			pulled = append(pulled, concept)
+		}
+
+		if r.NextPageToken == "" {
+			break
+		}
+		pageToken = r.NextPageToken
 	}
 
-	return nil, nil
+	return pulled, nil
 }
 
 // getTokenFromWeb requests a token from the web using a local OAuth2 callback server.

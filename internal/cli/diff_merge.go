@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 
 	"github.com/abcubed3/okf/pkg/bundle"
-	"github.com/abcubed3/okf/pkg/harvester"
 	"github.com/abcubed3/okf/pkg/parser"
 )
 
@@ -139,13 +138,8 @@ func RunMerge(args []string) error {
 		return fmt.Errorf("failed to resolve absolute output path: %w", err)
 	}
 
-	var concepts []*bundle.Concept
-	for _, c := range merged.Concepts {
-		concepts = append(concepts, c)
-	}
-
-	if err := harvester.WriteConcepts(concepts, absOut); err != nil {
-		return fmt.Errorf("failed to write merged concepts: %w", err)
+	if err := bundle.WriteBundle(merged, absOut); err != nil {
+		return fmt.Errorf("failed to write merged bundle: %w", err)
 	}
 
 	fmt.Printf("Successfully merged bundles! Written into %q\n", absOut)

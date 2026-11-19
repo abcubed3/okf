@@ -16,6 +16,7 @@ func RunSync(args []string) error {
 	configPath := fs.String("config", "okf.yaml", "Path to the sync configuration file")
 	daemon := fs.Bool("daemon", false, "Run continuously as a daemon")
 	interval := fs.Int("interval", 300, "Sync interval in seconds (when running as daemon)")
+	dryRun := fs.Bool("dry-run", false, "Preview sync actions without writing to remote APIs or local files")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -32,7 +33,13 @@ func RunSync(args []string) error {
 	}
 
 	fmt.Printf("Starting OKF Sync Engine for bundle at %s (Config: %s)\n", absBundlePath, *configPath)
-	if err := okfsync.Run(absBundlePath, *configPath, *daemon, *interval); err != nil {
+	if err := okfsync.RunWithOptions(okfsync.SyncOptions{
+		BundlePath: absBundlePath,
+		ConfigPath: *configPath,
+		Daemon:     *daemon,
+		Interval:   *interval,
+		DryRun:     *dryRun,
+	}); err != nil {
 		return fmt.Errorf("sync engine failed: %w", err)
 	}
 

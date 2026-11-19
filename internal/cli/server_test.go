@@ -1,9 +1,7 @@
 package cli
 
 import (
-	"context"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -24,24 +22,33 @@ func TestRunServer_InvalidBundlePath(t *testing.T) {
 }
 
 func TestRunServer_RemoteFlag(t *testing.T) {
-	sampleDir, err := filepath.Abs("../../testdata/bundles/sample")
+	oldStdin := os.Stdin
+	r, w, err := os.Pipe()
 	if err != nil {
-		t.Fatalf("failed to resolve testdata path: %v", err)
+		t.Fatalf("pipe failed: %v", err)
 	}
+	os.Stdin = r
+	defer func() {
+		os.Stdin = oldStdin
+		_ = r.Close()
+		_ = w.Close()
+	}()
 
-	// proxyRemoteMCP blocks on context.Background().Done(). We can test that --remote parses cleanly
-	// and invokes proxyRemoteMCP by testing in a goroutine with timeout or custom context cancel if needed.
-	// For testing, run proxyRemoteMCP in goroutine and verify it starts without error.
 	done := make(chan error, 1)
 	go func() {
-		done <- RunServer([]string{"--bundle", sampleDir, "--remote"})
+		done <- RunServer([]string{"--bundle", "acme/core", "--remote"})
 	}()
 
 	select {
 	case err := <-done:
 		t.Fatalf("unexpected early termination of remote proxy: %v", err)
-	case <-time.After(100 * time.Millisecond):
-		// Proxy is running in background as expected
+	case <-time.After(50 * time.Millisecond):
+		// Close stdin to signal EOF and verify clean exit
+		_ = w.Close()
+	}
+
+	if err := <-done; err != nil {
+		t.Fatalf("expected clean exit on stdin EOF, got: %v", err)
 	}
 }
 
@@ -68,23 +75,14 @@ func captureStderr(f func()) string {
 	return buf.String()
 }
 
-func TestProxyRemoteMCP_Output(t *testing.T) {
-	out := captureStderr(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-		defer cancel()
-
-		go func() {
-			<-ctx.Done()
-		}()
-
-		// Run proxy in background
-		go func() {
-			_ = proxyRemoteMCP("sample-bundle")
-		}()
-		time.Sleep(100 * time.Millisecond)
-	})
-
-	if !strings.Contains(out, "Starting OKF MCP Remote Proxy for bundle: sample-bundle") {
-		t.Errorf("expected remote proxy output, got: %s", out)
+func TestRunServer_RemoteValidation(t *testing.T) {
+	if err := RunServer([]string{"--remote", "--transport", "http", "--bundle", "acme/core"}); err == nil {
+		t.Errorf("expected --remote with --transport http to fail")
+	}
+	if err := RunServer([]string{"--remote", "--port", "9090", "--bundle", "acme/core"}); err == nil {
+		t.Errorf("expected --remote with --port to fail")
+	}
+	if err := RunServer([]string{"--remote", "--bundle", "single-segment"}); err == nil {
+		t.Errorf("expected --remote with 1-segment bundle ID to fail")
 	}
 }

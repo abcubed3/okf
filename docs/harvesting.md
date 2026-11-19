@@ -27,7 +27,7 @@ okf harvest db \
 
 ## Git Harvesting
 
-Extract the commit history of a repository. It analyzes commit messages and file changes, outputting each commit as an OKF `TechArticle` concept.
+Extract the commit history of a repository. It analyzes commit messages and file changes, outputting concepts for the `Git Repository`, each `Git Commit`, and each `Git Contributor`.
 
 **Example: Local Repository**
 ```bash
@@ -55,11 +55,11 @@ okf harvest web \
 
 ## OpenAPI Specification
 
-Parses an OpenAPI v3 YAML or JSON file. It creates discrete OKF concepts for the API itself, as well as distinct concepts for every endpoint operation (e.g., `GET /users`).
+Parses a Swagger v2 or OpenAPI v3 YAML/JSON file. It creates discrete `API Endpoint` OKF concepts for every endpoint operation (e.g., `GET /users`).
 
 ```bash
 okf harvest openapi \
-  --file ./api-spec.yaml \
+  --spec ./api-spec.yaml \
   --output ./okf-bundle
 ```
 
@@ -69,6 +69,6 @@ Parses Protocol Buffer (`.proto`) files. It extracts Services, RPC Methods, and 
 
 ```bash
 okf harvest proto \
-  --dir ./proto \
+  --path ./proto \
   --output ./okf-bundle
 ```

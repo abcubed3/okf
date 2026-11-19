@@ -14,10 +14,12 @@ func RunPublish(args []string) error {
 	bundlePath := "."
 	host := "http://localhost:8080"
 	apiKey := ""
+	bundleID := ""
 
 	fs := flag.NewFlagSet("publish", flag.ContinueOnError)
 	fs.StringVar(&host, "host", host, "OKF Hub host URL")
 	fs.StringVar(&apiKey, "api-key", "", "OKF Hub API Key (overrides env and config)")
+	fs.StringVar(&bundleID, "id", "", "Canonical Hub bundle ID (<org>/<bundle>)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -31,7 +33,7 @@ func RunPublish(args []string) error {
 		return fmt.Errorf("API Key is required for publishing. Use --api-key, OKF_HUB_API_KEY, or run `okf auth login`")
 	}
 
-	if err := publish.PublishBundle(bundlePath, host, apiKey); err != nil {
+	if err := publish.PublishBundleWithID(bundlePath, bundleID, host, apiKey); err != nil {
 		return fmt.Errorf("error publishing bundle: %w", err)
 	}
 	return nil
