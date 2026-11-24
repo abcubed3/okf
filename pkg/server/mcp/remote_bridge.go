@@ -66,7 +66,7 @@ func RunRemoteBridge(ctx context.Context, cfg RemoteBridgeConfig) error {
 		endpoint: endpoint,
 	}
 
-	fmt.Fprintf(cfg.ErrOut, "OKF remote MCP bridge connected: bundle=%s endpoint=%s\n", bundleID, endpoint)
+	_, _ = fmt.Fprintf(cfg.ErrOut, "OKF remote MCP bridge connected: bundle=%s endpoint=%s\n", bundleID, endpoint)
 
 	scanner := bufio.NewScanner(cfg.In)
 	scanner.Buffer(make([]byte, 0, 64*1024), bridgeMaxMessageBytes)
@@ -85,7 +85,7 @@ func RunRemoteBridge(ctx context.Context, cfg RemoteBridgeConfig) error {
 		b.recordInitLifecycle(payload)
 
 		if err := b.forwardMessage(ctx, payload); err != nil {
-			fmt.Fprintf(cfg.ErrOut, "remote MCP bridge error: %v\n", err)
+			_, _ = fmt.Fprintf(cfg.ErrOut, "remote MCP bridge error: %v\n", err)
 			return err
 		}
 	}
@@ -166,7 +166,7 @@ func (b *remoteBridge) forwardMessage(ctx context.Context, payload []byte) error
 		if len(initReq) == 0 {
 			return fmt.Errorf("remote MCP session expired (HTTP 404) and no initialize payload was cached")
 		}
-		fmt.Fprintf(b.cfg.ErrOut, "remote MCP session expired (HTTP 404); re-initializing...\n")
+		_, _ = fmt.Fprintf(b.cfg.ErrOut, "remote MCP session expired (HTTP 404); re-initializing...\n")
 		if _, err := b.doPost(ctx, initReq, false); err != nil {
 			return fmt.Errorf("session re-initialization failed: %w", err)
 		}
@@ -211,7 +211,7 @@ func (b *remoteBridge) doPost(ctx context.Context, payload []byte, writeOutput b
 	if err != nil {
 		return 0, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if newSID := strings.TrimSpace(resp.Header.Get("Mcp-Session-Id")); newSID != "" {
 		b.mu.Lock()

@@ -60,7 +60,7 @@ func TestMCPServer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to connect client: %v", err)
 	}
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	// 1. Test Tools list
 	tools, err := session.ListTools(ctx, nil)

@@ -188,7 +188,7 @@ func ValidateLogFile(relSlash string, lg *bundle.Concept, b *bundle.Bundle, opts
 	return validateLogFileWithRoots(relSlash, lg, b, opts, rcache, resolveBundleRoots(b))
 }
 
-func validateLogFileWithRoots(relSlash string, lg *bundle.Concept, b *bundle.Bundle, opts Options, rcache remoteCache, roots bundleRoots) []Issue {
+func validateLogFileWithRoots(_ string, lg *bundle.Concept, b *bundle.Bundle, opts Options, rcache remoteCache, roots bundleRoots) []Issue {
 	if lg == nil {
 		return nil
 	}
@@ -582,7 +582,8 @@ func validateTrustSignals(c *bundle.Concept, b *bundle.Bundle) []Issue {
 	cType := strings.ToLower(strings.TrimSpace(c.Frontmatter.Type))
 	hasLegacyAttestation := c.Frontmatter.Attestation != nil &&
 		(strings.TrimSpace(c.Frontmatter.Attestation.Query) != "" || strings.TrimSpace(c.Frontmatter.Attestation.Executor) != "")
-	if cType == "attestation" {
+	switch cType {
+	case "attestation":
 		// Silent backward compatibility for draft type: Attestation when populated
 		if !hasLegacyAttestation {
 			issues = append(issues, Issue{
@@ -592,7 +593,7 @@ func validateTrustSignals(c *bundle.Concept, b *bundle.Bundle) []Issue {
 				Message:   "attestation concept requires an 'attestation' frontmatter block with 'query' or 'executor'",
 			})
 		}
-	} else if cType == "attested computation" {
+	case "attested computation":
 		for i, p := range c.Frontmatter.Parameters {
 			if strings.TrimSpace(p.Name) == "" {
 				issues = append(issues, Issue{
@@ -908,7 +909,7 @@ func fetchRemoteBundle(opts Options, bundleID string) remoteBundleEntry {
 	if err != nil {
 		return remoteBundleEntry{unreachable: true, errMsg: err.Error()}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return remoteBundleEntry{concepts: make(map[string]bool)}

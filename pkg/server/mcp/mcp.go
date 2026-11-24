@@ -91,29 +91,29 @@ func (s *Server) registerCapabilities() {
 		if bundleTitle == "" {
 			bundleTitle = "OKF Bundle Index"
 		}
-		indexBuilder.WriteString(fmt.Sprintf("# %s\n\n", bundleTitle))
+		_, _ = fmt.Fprintf(&indexBuilder, "# %s\n\n", bundleTitle)
 		if bundleTitle != "OKF Bundle Index" {
 			indexBuilder.WriteString("<!-- OKF Bundle Index -->\n")
 		}
 		if s.bundle.Description != "" {
-			indexBuilder.WriteString(s.bundle.Description + "\n\n")
+			indexBuilder.WriteString(s.bundle.Description)
+			indexBuilder.WriteString("\n\n")
 		}
 		if s.bundle.OKFVersion != "" || s.bundle.License != "" {
-			indexBuilder.WriteString(fmt.Sprintf("- **OKF Version:** `%s`\n", func() string {
-				if s.bundle.OKFVersion != "" {
-					return s.bundle.OKFVersion
-				}
-				return "0.3"
-			}()))
+			ver := s.bundle.OKFVersion
+			if ver == "" {
+				ver = "0.3"
+			}
+			_, _ = fmt.Fprintf(&indexBuilder, "- **OKF Version:** `%s`\n", ver)
 			if s.bundle.License != "" {
-				indexBuilder.WriteString(fmt.Sprintf("- **License:** `%s`\n", s.bundle.License))
+				_, _ = fmt.Fprintf(&indexBuilder, "- **License:** `%s`\n", s.bundle.License)
 			}
 			indexBuilder.WriteString("\n")
 		}
 		ids := sortedValidConceptIDs(s.bundle)
 		for _, id := range ids {
 			c := s.bundle.Concepts[id]
-			indexBuilder.WriteString(fmt.Sprintf("- [%s](okf://concept/%s) (%s): %s\n", c.Frontmatter.Title, c.ID, c.Frontmatter.Type, c.Frontmatter.Desc))
+			_, _ = fmt.Fprintf(&indexBuilder, "- [%s](okf://concept/%s) (%s): %s\n", c.Frontmatter.Title, c.ID, c.Frontmatter.Type, c.Frontmatter.Desc)
 		}
 		return &sdk.ReadResourceResult{
 			Contents: []*sdk.ResourceContents{
@@ -347,12 +347,12 @@ func (s *Server) StartWatcher(ctx context.Context) error {
 		return nil
 	})
 	if err != nil {
-		watcher.Close()
+		_ = watcher.Close()
 		return err
 	}
 
 	go func() {
-		defer watcher.Close()
+		defer func() { _ = watcher.Close() }()
 		for {
 			select {
 			case <-ctx.Done():

@@ -290,8 +290,10 @@ func TestParseBundle_FileNotDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.Close()
-	defer os.Remove(f.Name())
+	if err = f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Remove(f.Name()) }()
 
 	_, err = ParseBundle(context.Background(), f.Name())
 	if err == nil {
@@ -393,8 +395,8 @@ tags: [ecommerce, users]
 # Users Table
 Demographics information.`
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	
+	for b.Loop() {
 		r := strings.NewReader(input)
 		_, err := ParseConceptReader(r, "test.md", "test")
 		if err != nil {
@@ -417,8 +419,8 @@ func BenchmarkParseBundle(b *testing.B) {
 		}
 	}
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	
+	for b.Loop() {
 		_, err := ParseBundle(context.Background(), dir)
 		if err != nil {
 			b.Fatal(err)

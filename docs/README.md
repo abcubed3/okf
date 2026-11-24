@@ -17,5 +17,4 @@ This directory provides in-depth guides on using the `okf` CLI for various tasks
 
 ---
 
-
 **Tip:** Run `okf help` in your terminal for a quick reference of all available commands and flags.

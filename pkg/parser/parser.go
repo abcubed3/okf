@@ -125,7 +125,9 @@ func ParseBundleWithOptions(ctx context.Context, rootPath string, opts ParseOpti
 					}
 				} else {
 					c, parseErr := parseConceptReaderWithLimit(f, relPath, id, opts.MaxFileSize)
-					f.Close()
+					if closeErr := f.Close(); closeErr != nil && parseErr == nil {
+						parseErr = closeErr
+					}
 					if parseErr != nil {
 						if c == nil {
 							c = &bundle.Concept{ID: id, Path: relPath}
@@ -275,7 +277,7 @@ func parseConceptFileWithLimit(fullPath, relPath, conceptID string, maxFileSize 
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	return parseConceptReaderWithLimit(file, relPath, conceptID, maxFileSize)
 }
