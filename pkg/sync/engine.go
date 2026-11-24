@@ -276,7 +276,16 @@ func (e *Engine) pullFromConnector(ctx context.Context, c Connector, localBundle
 				}
 				contentChanged := concept.Body != localC.Body || concept.Frontmatter.Computation != localC.Frontmatter.Computation
 				if contentChanged && reflect.DeepEqual(concept.Frontmatter.Verified, localC.Frontmatter.Verified) {
-					concept.Frontmatter.Verified = nil
+					// Per OKF v0.3 §5.3, preserve historical verification records while advancing
+					// generated.at so TrustTier() automatically demotes until re-verified.
+					by := "process:okf-sync-" + c.Name()
+					if concept.Frontmatter.Generated != nil && concept.Frontmatter.Generated.By != "" {
+						by = concept.Frontmatter.Generated.By
+					}
+					concept.Frontmatter.Generated = &bundle.ActorInfo{
+						By: by,
+						At: time.Now().UTC().Format(time.RFC3339),
+					}
 				}
 			}
 		}

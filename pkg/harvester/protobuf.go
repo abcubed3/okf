@@ -194,12 +194,15 @@ func (h *ProtobufHarvester) buildMessageConcept(pkg string, fd linker.File, msg 
 		ID:   conceptID,
 		Path: conceptPath,
 		Frontmatter: bundle.Frontmatter{
-			Type:      "Protobuf Message",
-			Title:     fmt.Sprintf("Message %s", msgName),
-			Desc:      shortDesc,
-			Resource:  fqn,
-			Tags:      []string{"protobuf", "message", pkg},
-			Timestamp: timestamp,
+			Type:     "Protobuf Message",
+			Title:    fmt.Sprintf("Message %s", msgName),
+			Desc:     shortDesc,
+			Resource: fqn,
+			Tags:     []string{"protobuf", "message", pkg},
+			Generated: &bundle.ActorInfo{
+				By: "okf-harvester/v0.3",
+				At: timestamp,
+			},
 		},
 		Body: body.String(),
 	}
@@ -264,12 +267,15 @@ func (h *ProtobufHarvester) buildServiceConcept(pkg string, fd linker.File, srv 
 		ID:   conceptID,
 		Path: conceptPath,
 		Frontmatter: bundle.Frontmatter{
-			Type:      "Protobuf Service",
-			Title:     fmt.Sprintf("Service %s", srvName),
-			Desc:      shortDesc,
-			Resource:  fqn,
-			Tags:      []string{"protobuf", "service", pkg},
-			Timestamp: timestamp,
+			Type:     "Protobuf Service",
+			Title:    fmt.Sprintf("Service %s", srvName),
+			Desc:     shortDesc,
+			Resource: fqn,
+			Tags:     []string{"protobuf", "service", pkg},
+			Generated: &bundle.ActorInfo{
+				By: "okf-harvester/v0.3",
+				At: timestamp,
+			},
 		},
 		Body: body.String(),
 	}

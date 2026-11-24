@@ -133,3 +133,45 @@ func BenchmarkGenerate(b *testing.B) {
 		}
 	}
 }
+
+func TestGenerate_V03BundlePortalAndRootLinks(t *testing.T) {
+	v03Path := filepath.Join("..", "..", "testdata", "bundles", "v0_3-example")
+	if _, err := os.Stat(v03Path); os.IsNotExist(err) {
+		t.Skipf("v0_3-example bundle %q not found", v03Path)
+	}
+
+	outDir := t.TempDir()
+	if err := Generate(v03Path, outDir); err != nil {
+		t.Fatalf("Generate(v0_3-example) failed: %v", err)
+	}
+
+	vizBytes, err := os.ReadFile(filepath.Join(outDir, "viz.html"))
+	if err != nil {
+		t.Fatalf("read viz.html: %v", err)
+	}
+	viz := string(vizBytes)
+	for _, want := range []string{
+		`"okfVersion":"0.3"`,
+		`"license":"Apache-2.0"`,
+		`if (path.charAt(0) === '/')`,
+	} {
+		if !strings.Contains(viz, want) {
+			t.Errorf("expected viz.html to contain %q", want)
+		}
+	}
+
+	compJSONBytes, err := os.ReadFile(filepath.Join(outDir, "concepts", "computations", "mrr.json"))
+	if err != nil {
+		t.Fatalf("read concepts/computations/mrr.json: %v", err)
+	}
+	compJSON := string(compJSONBytes)
+	for _, want := range []string{
+		`"type":"Attested Computation"`,
+		`"runtime":"bigquery"`,
+		`"sanctionedQuery":"SELECT`,
+	} {
+		if !strings.Contains(compJSON, want) {
+			t.Errorf("expected computations/mrr.json to contain %q, got:\n%s", want, compJSON)
+		}
+	}
+}

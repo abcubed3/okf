@@ -7,19 +7,25 @@ import (
 	"sort"
 )
 
+// ConceptDiffType classifies how a concept or reserved file changed between two bundles.
 type ConceptDiffType string
 
 const (
-	DiffAdded    ConceptDiffType = "ADDED"
-	DiffDeleted  ConceptDiffType = "DELETED"
+	// DiffAdded indicates a concept or reserved file present only in the target bundle.
+	DiffAdded ConceptDiffType = "ADDED"
+	// DiffDeleted indicates a concept or reserved file removed in the target bundle.
+	DiffDeleted ConceptDiffType = "DELETED"
+	// DiffModified indicates a concept or reserved file whose frontmatter or body changed.
 	DiffModified ConceptDiffType = "MODIFIED"
 )
 
+// FieldDiff records the old and new values of a modified frontmatter attribute.
 type FieldDiff struct {
-	OldValue interface{}
-	NewValue interface{}
+	OldValue any
+	NewValue any
 }
 
+// ConceptDiff summarizes frontmatter and body drift for a single concept or reserved file.
 type ConceptDiff struct {
 	ID        string
 	Type      ConceptDiffType
@@ -27,6 +33,7 @@ type ConceptDiff struct {
 	BodyDrift bool
 }
 
+// BundleDiff aggregates all structural and metadata changes between two bundles.
 type BundleDiff struct {
 	SourcePath string
 	TargetPath string
@@ -106,6 +113,36 @@ func Diff(oldB, newB *Bundle) (*BundleDiff, error) {
 		}
 	}
 
+	// 4. Check LogFiles for additions, modifications, and deletions
+	for relPath, newLg := range newB.LogFiles {
+		oldLg, exists := oldB.LogFiles[relPath]
+		if !exists {
+			diff.Changes = append(diff.Changes, ConceptDiff{
+				ID:   relPath,
+				Type: DiffAdded,
+			})
+			continue
+		}
+		bodyDrift := newLg.Body != oldLg.Body
+		fmDiffs := compareFrontmatter(oldLg.Frontmatter, newLg.Frontmatter)
+		if bodyDrift || len(fmDiffs) > 0 {
+			diff.Changes = append(diff.Changes, ConceptDiff{
+				ID:        relPath,
+				Type:      DiffModified,
+				FmDiffs:   fmDiffs,
+				BodyDrift: bodyDrift,
+			})
+		}
+	}
+	for relPath := range oldB.LogFiles {
+		if _, exists := newB.LogFiles[relPath]; !exists {
+			diff.Changes = append(diff.Changes, ConceptDiff{
+				ID:   relPath,
+				Type: DiffDeleted,
+			})
+		}
+	}
+
 	return diff, nil
 }
 
@@ -114,6 +151,9 @@ func compareFrontmatter(oldFm, newFm Frontmatter) map[string]FieldDiff {
 
 	if oldFm.OKFVersion != newFm.OKFVersion {
 		diffs["okf_version"] = FieldDiff{OldValue: oldFm.OKFVersion, NewValue: newFm.OKFVersion}
+	}
+	if oldFm.License != newFm.License {
+		diffs["license"] = FieldDiff{OldValue: oldFm.License, NewValue: newFm.License}
 	}
 	if oldFm.Type != newFm.Type {
 		diffs["type"] = FieldDiff{OldValue: oldFm.Type, NewValue: newFm.Type}
@@ -138,11 +178,17 @@ func compareFrontmatter(oldFm, newFm Frontmatter) map[string]FieldDiff {
 	if oldFm.Status != newFm.Status {
 		diffs["status"] = FieldDiff{OldValue: oldFm.Status, NewValue: newFm.Status}
 	}
+	if oldFm.SupersededBy != newFm.SupersededBy {
+		diffs["superseded_by"] = FieldDiff{OldValue: oldFm.SupersededBy, NewValue: newFm.SupersededBy}
+	}
 	if oldFm.StaleAfter != newFm.StaleAfter {
 		diffs["stale_after"] = FieldDiff{OldValue: oldFm.StaleAfter, NewValue: newFm.StaleAfter}
 	}
 	if !reflect.DeepEqual(oldFm.Sources, newFm.Sources) {
 		diffs["sources"] = FieldDiff{OldValue: oldFm.Sources, NewValue: newFm.Sources}
+	}
+	if !reflect.DeepEqual(oldFm.UsageWindow, newFm.UsageWindow) {
+		diffs["usage_window"] = FieldDiff{OldValue: oldFm.UsageWindow, NewValue: newFm.UsageWindow}
 	}
 	if !reflect.DeepEqual(oldFm.Generated, newFm.Generated) {
 		diffs["generated"] = FieldDiff{OldValue: oldFm.Generated, NewValue: newFm.Generated}

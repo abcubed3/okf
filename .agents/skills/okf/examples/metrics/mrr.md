@@ -7,20 +7,19 @@ tags:
   - "finance"
   - "revenue"
   - "kpi"
-timestamp: "2026-08-01T12:00:00Z"
-
 status: "stable"
 stale_after: "2027-01-01T00:00:00Z"
 
 sources:
-  - resource: "https://stripe.com/docs/billing/subscriptions"
+  - id: "stripe-docs"
+    resource: "https://stripe.com/docs/billing/subscriptions"
     title: "Stripe Subscription Lifecycle Documentation"
-    author: "Billing Architecture Team"
+    author: "team:billing-architecture"
     usage_count: 142
     last_modified: "2026-06-15T10:00:00Z"
 
 generated:
-  by: "okf-harvester/v0.2"
+  by: "okf-harvester/v0.3"
   at: "2026-08-01T12:00:00Z"
 
 verified:
@@ -30,13 +29,15 @@ verified:
 
 # Monthly Recurring Revenue (MRR)
 
-Monthly Recurring Revenue (MRR) measures normalized monthly revenue from active customer subscriptions.
+Monthly Recurring Revenue (MRR) measures normalized monthly revenue from active customer subscriptions.[^stripe-docs]
 
 ## Related Resources
-- Sanctioned Query: [Sanctioned MRR Calculation Query](../attestations/mrr_query.md)
-- Data Source Table: [Subscriptions Table](../tables/subscriptions.md)
+- Sanctioned Query: [Sanctioned MRR Calculation Query](/attestations/mrr_query.md)
+- Data Source Table: [Subscriptions Table](/tables/subscriptions.md)
 
 ## Business Logic Rules
 1. Only accounts with `status = 'active'` count towards MRR.
 2. Trial accounts and paused subscriptions are excluded.
 3. Annual contracts are normalized by dividing total commitment by 12.
+
+[^stripe-docs]: Stripe Subscription Lifecycle Documentation

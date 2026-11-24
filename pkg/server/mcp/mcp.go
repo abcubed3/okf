@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 
@@ -86,8 +87,32 @@ func (s *Server) registerCapabilities() {
 		defer s.mu.RUnlock()
 
 		var indexBuilder strings.Builder
-		indexBuilder.WriteString("# OKF Bundle Index\n\n")
-		for _, c := range s.bundle.Concepts {
+		bundleTitle := s.bundle.Title
+		if bundleTitle == "" {
+			bundleTitle = "OKF Bundle Index"
+		}
+		indexBuilder.WriteString(fmt.Sprintf("# %s\n\n", bundleTitle))
+		if bundleTitle != "OKF Bundle Index" {
+			indexBuilder.WriteString("<!-- OKF Bundle Index -->\n")
+		}
+		if s.bundle.Description != "" {
+			indexBuilder.WriteString(s.bundle.Description + "\n\n")
+		}
+		if s.bundle.OKFVersion != "" || s.bundle.License != "" {
+			indexBuilder.WriteString(fmt.Sprintf("- **OKF Version:** `%s`\n", func() string {
+				if s.bundle.OKFVersion != "" {
+					return s.bundle.OKFVersion
+				}
+				return "0.3"
+			}()))
+			if s.bundle.License != "" {
+				indexBuilder.WriteString(fmt.Sprintf("- **License:** `%s`\n", s.bundle.License))
+			}
+			indexBuilder.WriteString("\n")
+		}
+		ids := sortedValidConceptIDs(s.bundle)
+		for _, id := range ids {
+			c := s.bundle.Concepts[id]
 			indexBuilder.WriteString(fmt.Sprintf("- [%s](okf://concept/%s) (%s): %s\n", c.Frontmatter.Title, c.ID, c.Frontmatter.Type, c.Frontmatter.Desc))
 		}
 		return &sdk.ReadResourceResult{
@@ -423,16 +448,21 @@ func formatRawConcept(c *bundle.Concept) string {
 
 // --- Tool Handlers ---
 
-// ListConceptsArgs represents arguments for the list_concepts tool (currently empty).
-type ListConceptsArgs struct{}
+// ListConceptsArgs represents arguments for the list_concepts tool.
+type ListConceptsArgs struct {
+	ExcludeDeprecated *bool `json:"exclude_deprecated,omitempty" jsonschema:"optional flag to omit deprecated concepts"`
+}
 
 // ConceptSummary provides a concise overview of a concept.
 type ConceptSummary struct {
-	ID          string   `json:"id"`
-	Type        string   `json:"type"`
-	Title       string   `json:"title"`
-	Description string   `json:"description"`
-	Tags        []string `json:"tags,omitempty"`
+	ID           string   `json:"id"`
+	Type         string   `json:"type"`
+	Title        string   `json:"title"`
+	Description  string   `json:"description"`
+	Tags         []string `json:"tags,omitempty"`
+	Status       string   `json:"status,omitempty"`
+	TrustTier    string   `json:"trust_tier,omitempty"`
+	SupersededBy string   `json:"superseded_by,omitempty"`
 }
 
 // ListConceptsResult encapsulates the search response containing lists of concepts.
@@ -440,19 +470,42 @@ type ListConceptsResult struct {
 	Concepts []ConceptSummary `json:"concepts"`
 }
 
+func sortedValidConceptIDs(b *bundle.Bundle) []string {
+	if b == nil {
+		return nil
+	}
+	ids := make([]string, 0, len(b.Concepts))
+	for id, c := range b.Concepts {
+		if c == nil || c.ParseError != "" {
+			continue
+		}
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
+}
+
 // handleListConcepts returns a summary list of all available concepts in the bundle.
 func (s *Server) handleListConcepts(ctx context.Context, req *sdk.CallToolRequest, args ListConceptsArgs) (*sdk.CallToolResult, ListConceptsResult, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
+	excludeDep := args.ExcludeDeprecated != nil && *args.ExcludeDeprecated
 	var list []ConceptSummary
-	for id, c := range s.bundle.Concepts {
+	for _, id := range sortedValidConceptIDs(s.bundle) {
+		c := s.bundle.Concepts[id]
+		if excludeDep && strings.EqualFold(string(c.Frontmatter.Status), string(bundle.ConceptLifecycleDeprecated)) {
+			continue
+		}
 		list = append(list, ConceptSummary{
-			ID:          id,
-			Type:        c.Frontmatter.Type,
-			Title:       c.Frontmatter.Title,
-			Description: c.Frontmatter.Desc,
-			Tags:        c.Frontmatter.Tags,
+			ID:           id,
+			Type:         c.Frontmatter.Type,
+			Title:        c.Frontmatter.Title,
+			Description:  c.Frontmatter.Desc,
+			Tags:         c.Frontmatter.Tags,
+			Status:       string(c.Frontmatter.Status),
+			TrustTier:    c.TrustTier(),
+			SupersededBy: c.Frontmatter.SupersededBy,
 		})
 	}
 	return &sdk.CallToolResult{
@@ -466,9 +519,10 @@ func (s *Server) handleListConcepts(ctx context.Context, req *sdk.CallToolReques
 
 // SearchConceptsArgs defines search criteria for searching/filtering concepts.
 type SearchConceptsArgs struct {
-	Query string `json:"query,omitempty" jsonschema:"optional keyword query to match against ID, title, description, or tags"`
-	Type  string `json:"type,omitempty" jsonschema:"optional concept type to filter by (e.g. BigQuery Table)"`
-	Tag   string `json:"tag,omitempty" jsonschema:"optional tag to filter by"`
+	Query             string `json:"query,omitempty" jsonschema:"optional keyword query to match against ID, title, description, or tags"`
+	Type              string `json:"type,omitempty" jsonschema:"optional concept type to filter by (e.g. BigQuery Table)"`
+	Tag               string `json:"tag,omitempty" jsonschema:"optional tag to filter by"`
+	ExcludeDeprecated *bool  `json:"exclude_deprecated,omitempty" jsonschema:"optional flag to omit deprecated concepts"`
 }
 
 // SearchConceptsResult encapsulates the search outcomes.
@@ -485,8 +539,13 @@ func (s *Server) handleSearchConcepts(ctx context.Context, req *sdk.CallToolRequ
 	qTokens := tokenize(args.Query)
 	filterType := strings.ToLower(args.Type)
 	filterTag := strings.ToLower(args.Tag)
+	excludeDep := args.ExcludeDeprecated != nil && *args.ExcludeDeprecated
 
-	for id, c := range s.bundle.Concepts {
+	for _, id := range sortedValidConceptIDs(s.bundle) {
+		c := s.bundle.Concepts[id]
+		if excludeDep && strings.EqualFold(string(c.Frontmatter.Status), string(bundle.ConceptLifecycleDeprecated)) {
+			continue
+		}
 		if filterType != "" && strings.ToLower(c.Frontmatter.Type) != filterType {
 			continue
 		}
@@ -520,11 +579,14 @@ func (s *Server) handleSearchConcepts(ctx context.Context, req *sdk.CallToolRequ
 		}
 
 		results = append(results, ConceptSummary{
-			ID:          id,
-			Type:        c.Frontmatter.Type,
-			Title:       c.Frontmatter.Title,
-			Description: c.Frontmatter.Desc,
-			Tags:        c.Frontmatter.Tags,
+			ID:           id,
+			Type:         c.Frontmatter.Type,
+			Title:        c.Frontmatter.Title,
+			Description:  c.Frontmatter.Desc,
+			Tags:         c.Frontmatter.Tags,
+			Status:       string(c.Frontmatter.Status),
+			TrustTier:    c.TrustTier(),
+			SupersededBy: c.Frontmatter.SupersededBy,
 		})
 	}
 

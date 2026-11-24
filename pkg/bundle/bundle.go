@@ -14,8 +14,18 @@ type Bundle struct {
 	Concepts map[string]*Concept
 	// IndexFiles maps bundle-relative slash paths (e.g., "index.md", "apis/index.md") to parsed index documents.
 	IndexFiles map[string]*Concept
+	// LogFiles maps bundle-relative slash paths (e.g., "log.md", "apis/log.md") to parsed log documents.
+	LogFiles map[string]*Concept
+	// SkippedFiles lists bundle-relative slash paths of non-concept Markdown files ignored per OKF v0.3 §11.
+	SkippedFiles []string
 	// OKFVersion is the targeted OKF version declared in the bundle-root index.md frontmatter.
 	OKFVersion string
+	// Title is the optional bundle title declared in the bundle-root index.md frontmatter (OKF v0.3 §8.1).
+	Title string
+	// Description is the optional bundle description declared in the bundle-root index.md frontmatter (OKF v0.3 §8.1).
+	Description string
+	// License is the optional SPDX/usage license declared in the bundle-root index.md frontmatter (OKF v0.3 §8.1).
+	License string
 }
 
 // NewBundle initializes a new empty Bundle with the given root path.
@@ -24,6 +34,7 @@ func NewBundle(path string) *Bundle {
 		Path:       path,
 		Concepts:   make(map[string]*Concept),
 		IndexFiles: make(map[string]*Concept),
+		LogFiles:   make(map[string]*Concept),
 	}
 }
 

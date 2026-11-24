@@ -49,6 +49,9 @@ func ExportBundleToSkill(b *bundle.Bundle, opts ExportOptions) (string, error) {
 
 	desc := strings.TrimSpace(opts.Description)
 	if desc == "" {
+		desc = strings.TrimSpace(b.Description)
+	}
+	if desc == "" {
 		desc = fmt.Sprintf("Domain knowledge and verified schemas compiled from the %s OKF bundle. Use when querying database tables, business metrics, or attested calculation logic in this domain.", name)
 	}
 
@@ -80,7 +83,7 @@ func ExportBundleToSkill(b *bundle.Bundle, opts ExportOptions) (string, error) {
 	sb.WriteString("---\n\n")
 
 	// 2. Title & Overview
-	sb.WriteString(fmt.Sprintf("# %s — Agent Skill\n\n", strings.Title(strings.ReplaceAll(name, "-", " "))))
+	sb.WriteString(fmt.Sprintf("# %s — Agent Skill\n\n", titleCaseWords(strings.ReplaceAll(name, "-", " "))))
 	sb.WriteString("This skill provides verified domain knowledge, catalog schemas, and sanctioned calculation rules compiled directly from the organizational Open Knowledge Format (OKF) bundle.\n\n")
 
 	// 3. Trust & Freshness Directives
@@ -133,11 +136,13 @@ func ExportBundleToSkill(b *bundle.Bundle, opts ExportOptions) (string, error) {
 			if attester != "" {
 				sb.WriteString(fmt.Sprintf("- **Attester:** `%s`\n", attester))
 			}
-			if len(a.Frontmatter.Verified) > 0 {
-				sb.WriteString(fmt.Sprintf("- **Verification Tier:** `%s` (by %s)\n", a.Frontmatter.Verified[0].Tier(), a.Frontmatter.Verified[0].By))
+			if verifier := a.PrimaryVerifier(); verifier != "" {
+				sb.WriteString(fmt.Sprintf("- **Verification Tier:** `%s` (by %s)\n", a.TrustTier(), verifier))
 			}
-			if query := a.SanctionedQuery(); query != "" {
-				sb.WriteString("\n```sql\n")
+			query := a.ResolvedQuery(b.Path)
+			if query != "" {
+				fenceLang := codeFenceLangForRuntime(a.Frontmatter.Runtime)
+				sb.WriteString(fmt.Sprintf("\n```%s\n", fenceLang))
 				sb.WriteString(query)
 				sb.WriteString("\n```\n\n")
 			}
@@ -182,11 +187,14 @@ func ExportBundleToSkill(b *bundle.Bundle, opts ExportOptions) (string, error) {
 			if c.Frontmatter.Status != "" {
 				sb.WriteString(fmt.Sprintf("- **Lifecycle Status:** `%s`\n", c.Frontmatter.Status))
 			}
+			if c.Frontmatter.SupersededBy != "" {
+				sb.WriteString(fmt.Sprintf("- **Superseded By:** `%s`\n", c.Frontmatter.SupersededBy))
+			}
 			if c.Frontmatter.StaleAfter != "" {
 				sb.WriteString(fmt.Sprintf("- **Stale After:** `%s`\n", c.Frontmatter.StaleAfter))
 			}
-			if len(c.Frontmatter.Verified) > 0 {
-				sb.WriteString(fmt.Sprintf("- **Trust Status:** Verified (%s by %s)\n", c.Frontmatter.Verified[0].Tier(), c.Frontmatter.Verified[0].By))
+			if verifier := c.PrimaryVerifier(); verifier != "" {
+				sb.WriteString(fmt.Sprintf("- **Trust Status:** Verified (%s by %s)\n", c.TrustTier(), verifier))
 			}
 
 			// Include snippet or summary from concept body if helpful
@@ -206,6 +214,32 @@ func ExportBundleToSkill(b *bundle.Bundle, opts ExportOptions) (string, error) {
 	return sb.String(), nil
 }
 
+func titleCaseWords(s string) string {
+	words := strings.Fields(s)
+	for i, w := range words {
+		if len(w) > 0 {
+			words[i] = strings.ToUpper(w[:1]) + w[1:]
+		}
+	}
+	return strings.Join(words, " ")
+}
+
+func codeFenceLangForRuntime(runtime string) string {
+	rt := strings.ToLower(strings.TrimSpace(runtime))
+	switch {
+	case strings.Contains(rt, "python"):
+		return "python"
+	case rt == "sh" || rt == "bash" || rt == "zsh" || strings.Contains(rt, "shell"):
+		return "bash"
+	case strings.Contains(rt, "javascript") || rt == "node" || rt == "js":
+		return "javascript"
+	case strings.Contains(rt, "typescript") || rt == "ts":
+		return "typescript"
+	default:
+		return "sql"
+	}
+}
+
 // filterConcepts returns only concepts matching the specified tags and types.
 func filterConcepts(concepts map[string]*bundle.Concept, tags, types []string) map[string]*bundle.Concept {
 	tagMap := make(map[string]bool)
@@ -220,6 +254,9 @@ func filterConcepts(concepts map[string]*bundle.Concept, tags, types []string) m
 
 	filtered := make(map[string]*bundle.Concept)
 	for id, c := range concepts {
+		if c == nil || c.ParseError != "" {
+			continue
+		}
 		// Filter by type if types specified
 		if len(typeMap) > 0 {
 			if !typeMap[strings.ToLower(c.Frontmatter.Type)] {

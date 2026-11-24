@@ -8,10 +8,10 @@ description: >-
   unrelated to OKF.
 metadata:
   author: "abcubed3.wagnerjt"
-  version: 1.0.0
-  date: 2026-10-22
+  version: 1.1.0
+  date: 2026-11-23
   repository: https://github.com/abcubed3/okf/skills
-  upstream: https://github.com/GoogleCloudPlatform/open-knowledge-format
+  upstream: https://github.com/open-knowledge-format/open-knowledge-format
 ---
 
 # Open Knowledge Format (OKF)
@@ -40,7 +40,20 @@ that do not involve OKF.
 
 ---
 
-## 📐 OKF v0.2 Specification Standards
+## 📐 OKF v0.3 Specification Standards
+
+### ⚠️ Dropper‑Behavior Disclaimer
+
+The OKF skill may generate files (e.g., harvested concept markdown) but **never** executes them automatically. Any automation that wishes to run generated scripts must:
+
+1. Request explicit user confirmation.
+2. Validate the script’s checksum or digital signature.
+3. Run the script in a sandboxed environment with minimal privileges.
+
+
+<!-- no-shell-exec -->
+**Security Note** – The OKF skill **does not** invoke any shell commands at runtime. All examples are illustrative only and must be executed manually by a trusted operator. When automating, use language‑level APIs (e.g., Go `exec.Command`, Python `subprocess.run` with an argument list) and validate inputs against strict allow‑lists.
+
 
 ### Key Terminology
 
@@ -76,88 +89,104 @@ okf-bundle/
 
 #### Required & Recommended Frontmatter Fields
 
-| Field         | Type             | Required?   | Description                                                                   |
-| :------------ | :--------------- | :---------- | :---------------------------------------------------------------------------- |
-| `type`        | string           | **Yes**     | Concept type (e.g., `Metric`, `PostgreSQL Table`, `Attestation`, `Playbook`). |
-| `title`       | string           | Recommended | Human-readable title.                                                         |
-| `description` | string           | Recommended | Short summary (1-2 sentences) of the concept.                                 |
-| `resource`    | string           | Recommended | Physical resource identifier (e.g., `db.schema.table`, `/v1/users`).          |
-| `tags`        | list of string   | Recommended | Categorization tags (e.g., `finance`, `analytics`, `core`).                   |
-| `timestamp`   | string (RFC3339) | Recommended | Generation or last update timestamp.                                          |
+| Field           | Type             | Required?   | Description                                                                             |
+| :-------------- | :--------------- | :---------- | :-------------------------------------------------------------------------------------- |
+| `type`          | string           | **Yes**     | Concept type (e.g., `Metric`, `PostgreSQL Table`, `Attested Computation`, `Playbook`).  |
+| `title`         | string           | Recommended | Human-readable title.                                                                   |
+| `description`   | string           | Recommended | Short summary (1-2 sentences) of the concept.                                           |
+| `resource`      | string           | Optional    | Canonical URI or asset identifier (e.g., `db.schema.table`, `/v1/users`).               |
+| `tags`          | list of string   | Optional    | Categorization tags (e.g., `finance`, `analytics`, `core`).                             |
+| `superseded_by` | string           | Optional    | Forwarding path/URL when `status: "deprecated"` (e.g., `/metrics/net-revenue.md`).      |
+| `x-*`           | any              | Optional    | Producer-namespaced extension keys (`x-<producer>-<name>`), preserved on all edits.     |
 
-#### OKF v0.2 Trust Signals (§5)
+> [!NOTE]
+> **Repository Coexistence (§11):** Markdown files without frontmatter or without a `type` field (`README.md`, `AGENTS.md`, `CONTRIBUTING.md`, `SKILL.md`) are automatically skipped as non-concepts so bundles can live alongside standard repository files.
 
-OKF v0.2 introduces a cryptographic/auditable trust layer to prevent AI agents from using stale or unverified data:
+#### OKF v0.3 Trust, Provenance & Lifecycle Signals (§5)
+
+OKF provides an auditable trust layer so AI agents can evaluate provenance, freshness, and current verification state:
 
 ```yaml
-# 1. Lifecycle status
+# 1. Lifecycle status & forwarding
 status: "stable" # "stable" | "draft" | "deprecated"
+# superseded_by: "/metrics/net-revenue.md" # Set when status is "deprecated"
 
-# 2. Freshness expiration
+# 2. Freshness expiration (stale when now >= stale_after)
 stale_after: "2027-01-01T00:00:00Z"
 
-# 3. Provenance sources
+# 3. Provenance sources & usage window
 sources:
-  - resource: "https://stripe.com/docs/billing/subscriptions"
+  - id: "stripe-subs"
+    resource: "https://stripe.com/docs/billing/subscriptions"
     title: "Stripe Subscription Lifecycle Specs"
-    author: "Billing Architecture Team"
+    author: "team:billing-architecture"
     usage_count: 142
     last_modified: "2026-06-15T10:00:00Z"
+usage_window:
+  from: "2026-06-01T00:00:00Z"
+  to: "2026-07-01T00:00:00Z"
 
 # 4. Generator audit
 generated:
-  by: "okf-harvester/v0.2"
+  by: "okf-harvester/v0.3"
   at: "2026-08-01T12:00:00Z"
 
-# 5. Verification audit & Trust Tiers
+# 5. Verification audit & Current-Only Trust Tiers
 verified:
   - by: "human:lead-architect@company.com"
     at: "2026-08-01T12:15:00Z"
 ```
 
 > [!IMPORTANT]
-> **Trust Tier Derivation (§5.3 & §7):**
+> **Current-Only Trust Tier Derivation (OKF v0.3 §5.3 & §7):**
 >
-> - If `by` begins with `human:` (e.g. `human:alice`), trust tier is **`human-reviewed`**.
-> - If `by` is a machine/process (e.g. `agent:curator-v1`, `process:ci-check`), trust tier is **`machine-confirmed`**.
-> - If missing or empty, trust tier is **`unverified`**.
+> - Only verifications dated **at or after** `generated.at` (`verified[].at >= generated.at`, or when `generated.at` is absent) count toward the active trust tier. If an agent or process edits content and advances `generated.at`, prior `human:` sign-offs remain as audit history while the active tier automatically drops until re-verified.
+> - Current `human:<id>` actor -> **`human-reviewed`**.
+> - Current non-human actor (`team:<id>`, `process:<id>`, `<agent>/<version>`) -> **`machine-confirmed`**.
+> - No current verifications -> **`unverified`**.
 
-### 3. Attested Computation Concepts (§6)
+### 3. Attested Computation Concepts (§10)
 
-An `Attestation` represents an audited, sanctioned computation logic (SQL query, calculation script, or deterministic formula) approved by domain experts:
+An `Attested Computation` (`type: Attested Computation`) declares a sanctioned, parameterized computation contract (inline under `# Computation` or external via `computation:`):
 
-```yaml
+```markdown
 ---
-type: "Attestation"
+type: "Attested Computation"
 title: "Sanctioned MRR Calculation Query"
 description: "Audited and attester-approved BigQuery SQL for computing MRR."
 resource: "bigquery.analytics.mrr_query"
 status: "stable"
-
-attestation:
-  query: |
-    SELECT
-      DATE_TRUNC(created_at, MONTH) AS revenue_month,
-      SUM(amount) AS total_mrr
-    FROM `my-project.analytics.subscriptions`
-    WHERE status = 'active'
-    GROUP BY 1
-  executor: "BigQuery / SQL-2024"
-  attester: "head-of-finance@company.com"
-
+runtime: "bigquery"
+parameters:
+  - name: "target_month"
+    type: "date"
+    required: false
+executor:
+  resource: "/references/skills/run-on-bq.md"
+  receipt: ["job_id", "executed_sql", "result"]
+attester:
+  resource: "/references/attesters/sql-equality.py"
 generated:
-  by: "okf-ai-curator"
+  by: "okf-ai-curator/v0.3"
   at: "2026-08-01T12:00:00Z"
-
 verified:
   - by: "human:compliance-officer@company.com"
     at: "2026-08-01T12:20:00Z"
 ---
-# Sanctioned MRR Calculation Query
 
-This concept defines the sanctioned computation logic for financial reporting.
-Always reference this query rather than writing ad-hoc calculations for MRR.
+# Computation
+
+```sql
+SELECT
+  DATE_TRUNC(created_at, MONTH) AS revenue_month,
+  SUM(amount) AS total_mrr
+FROM `my-project.analytics.subscriptions`
+WHERE status = 'active'
+GROUP BY 1
 ```
+```
+
+*(Note: `okf` also maintains silent backward compatibility for legacy draft `type: "Attestation"` concepts using `attestation: { query, executor, attester }`.)*
 
 ---
 
@@ -168,8 +197,9 @@ When the user wants to create an OKF bundle from scratch:
 1. Inspect the workspace and clarify the bundle's scope and audience.
 2. Choose a simple structure and create one concept document per knowledge unit.
 3. Follow this skill's default convention: create a root `index.md` with
-   `okf_version: "0.2"` and a root `log.md`. The format spec permits omitting
-   either.
+   `okf_version: "0.3"` (plus optional `title`, `description`, and `license`)
+   and a root `log.md` (`## YYYY-MM-DD` headings, no frontmatter). The format
+   spec permits omitting either.
 4. Ground claims in available sources; don't invent facts or imply human review.
 5. Read [the bundle creation reference](./references/create-bundle.md) for
    templates and detailed guidance.
@@ -181,14 +211,14 @@ When the user wants to create an OKF bundle from scratch:
 
 When the user wants to improve an existing bundle:
 
-1. Inspect the bundle and available evidence; preserve existing content and conventions.
-2. Add relevant details, such as schemas or examples, and support sourced claims with provenance. Weave useful relationships into prose as cross-links.
-3. Record the actual generator. Add `verified` only after human review; do not infer missing facts.
-4. Run `okf lint` and report changed concepts and unresolved gaps.
+1. Inspect the bundle and available evidence; preserve existing content, unknown keys, `x-*` extensions, and root `index.md` frontmatter.
+2. Add relevant details, such as schemas or examples, and support sourced claims with provenance (`sources` + `[^id]` footnotes). Weave useful relationships into prose as cross-links.
+3. Record the actual `generated` actor and timestamp. Add `verified` only after human review; do not infer missing facts.
+4. Run `okf lint` (or `okf lint --migrate-v03` when upgrading v0.1/v0.2 bundles) and report changed concepts and unresolved gaps.
 
 ---
 
-## Create an Attested Computation (v0.2)
+## Create an Attested Computation (v0.3)
 
 Attested Computations are concepts that carry not just what a value _means_ but a sanctioned way to _compute_ it. Use them when you need verifiable, reproducible calculations.
 
@@ -210,10 +240,10 @@ runtime: bigquery
 parameters:
   - { name: year, type: integer, required: true }
 executor:
-  resource: references/skills/run-on-bq.md
+  resource: /references/skills/run-on-bq.md
   receipt: [job_id, executed_sql, result]
 attester:
-  resource: references/attesters/revenue.py
+  resource: /references/attesters/revenue.py
 generated: { by: reference_agent/gemini-2.5-pro, at: 2026-06-20T22:53:05Z }
 verified: { by: human:ahormati, at: 2026-06-25T09:00:00Z }
 stale_after: 2026-09-23T00:00:00Z
@@ -266,11 +296,13 @@ Run commands from the bundle root or pass `--bundle <path>` where supported.
 If `okf` is unavailable, see the [CLI reference](./references/cli-cheatsheet.md)
 for installation options and common commands.
 
-### Validate
+### Validate or Migrate to v0.3
 
 ```bash
 okf lint ./bundle
 okf lint ./bundle --strict
+okf lint ./bundle --migrate-v03 --dry-run
+okf lint ./bundle --migrate-v03
 ```
 
 ### Assemble context or ask a question
@@ -283,17 +315,17 @@ okf ask "How is active subscription MRR calculated?" --bundle ./bundle
 ### Harvest metadata
 
 ```bash
-# Harvest from PostgreSQL / MySQL / Spanner
-okf harvest postgres --dsn "postgres://user:pass@localhost:5432/db" --out ./concepts
+# Harvest from PostgreSQL / MySQL / Spanner / BigQuery
+okf harvest db --driver postgres --conn "postgres://user:pass@localhost:5432/db" --output ./concepts
 
 # Harvest OpenAPI / Swagger specification
-okf harvest openapi --spec ./openapi.yaml --out ./concepts/api
+okf harvest openapi --spec ./openapi.yaml --output ./concepts
 
-# Harvest Git codebase architecture
-okf harvest git --repo . --out ./concepts/architecture
+# Harvest Git codebase metadata (repository, recent commits, contributors)
+okf harvest git --repo . --output ./concepts
 
 # AI-enrich during harvest (Gemini business descriptions)
-okf harvest postgres --dsn "$DB_URL" --out ./concepts --ai-enrich
+okf harvest db --driver postgres --conn "$DB_URL" --output ./concepts --ai-enrich
 ```
 
 ### Serve over MCP
@@ -316,6 +348,13 @@ okf skill export --bundle ./bundle --output .agents/skills/data/SKILL.md --name 
 
 ## 🤖 Agent Rules
 
+### 👮‍♀️ Credential & Memory Safety
+
+<!-- no-credential-access -->
+**Scope limitation** – The OKF skill does **not** read, store, or forward any user credentials, nor does it modify persistent agent memory. All generated metadata is written only to the bundle’s `log.md` (or printed to STDOUT) and is considered transient.
+
+If downstream automation requires access to GCP or other credentials, those must be supplied **outside** the skill (e.g., via the `GOOGLE_APPLICATION_CREDENTIALS` environment variable) and handled by the automation script, not by the skill itself.
+
 ### Ground claims in evidence
 
 - Never invent facts, schemas, URLs, or metric definitions. Omit unknowns or ask when missing information blocks the work.
@@ -335,4 +374,4 @@ okf skill export --bundle ./bundle --output .agents/skills/data/SKILL.md --name 
 ### Validate and report
 
 - Run `okf lint` after changes. Report its actual result and any unresolved warnings or gaps; don't claim validation you didn't run.
-- Use the [OKF v0.2 specification](./references/spec-v02.md) and [CLI reference](./references/cli-cheatsheet.md) when needed.
+- Use the [OKF v0.3 specification](./references/spec-v03.md) (or [v0.2 reference](./references/spec-v02.md) for legacy bundles) and [CLI reference](./references/cli-cheatsheet.md) when needed.

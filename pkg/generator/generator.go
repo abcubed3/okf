@@ -37,14 +37,22 @@ type ConceptJSON struct {
 	// Timestamp is the RFC3339 formatted generation/update time.
 	Timestamp string `json:"timestamp,omitempty"`
 
-	// --- OKF v0.2 Trust Signals ---
-	Status      string               `json:"status,omitempty"`
-	TrustTier   string               `json:"trustTier,omitempty"`
-	StaleAfter  string               `json:"staleAfter,omitempty"`
-	Sources     []bundle.Source      `json:"sources,omitempty"`
-	Generated   *bundle.ActorInfo    `json:"generated,omitempty"`
-	Verified    bundle.ActorInfoList `json:"verified,omitempty"`
-	Attestation *bundle.Attestation  `json:"attestation,omitempty"`
+	// --- OKF v0.2 / v0.3 Trust, Lifecycle & Computation Signals ---
+	Status          string               `json:"status,omitempty"`
+	SupersededBy    string               `json:"supersededBy,omitempty"`
+	TrustTier       string               `json:"trustTier,omitempty"`
+	StaleAfter      string               `json:"staleAfter,omitempty"`
+	Sources         []bundle.Source      `json:"sources,omitempty"`
+	UsageWindow     *bundle.UsageWindow  `json:"usageWindow,omitempty"`
+	Generated       *bundle.ActorInfo    `json:"generated,omitempty"`
+	Verified        bundle.ActorInfoList `json:"verified,omitempty"`
+	Runtime         string               `json:"runtime,omitempty"`
+	Parameters      []bundle.Parameter   `json:"parameters,omitempty"`
+	Computation     string               `json:"computation,omitempty"`
+	Executor        *bundle.Executor     `json:"executor,omitempty"`
+	Attester        *bundle.Attester     `json:"attester,omitempty"`
+	SanctionedQuery string               `json:"sanctionedQuery,omitempty"`
+	Attestation     *bundle.Attestation  `json:"attestation,omitempty"`
 
 	// Body is the raw markdown content of this concept.
 	Body string `json:"body"`
@@ -69,10 +77,11 @@ type ConceptIndexEntry struct {
 	// Timestamp is the RFC3339 formatted generation/update time.
 	Timestamp string `json:"timestamp,omitempty"`
 
-	// --- OKF v0.2 Trust Signals ---
-	Status     string `json:"status,omitempty"`
-	TrustTier  string `json:"trustTier,omitempty"`
-	StaleAfter string `json:"staleAfter,omitempty"`
+	// --- OKF v0.2 / v0.3 Trust Signals ---
+	Status       string `json:"status,omitempty"`
+	SupersededBy string `json:"supersededBy,omitempty"`
+	TrustTier    string `json:"trustTier,omitempty"`
+	StaleAfter   string `json:"staleAfter,omitempty"`
 
 	// Excerpt is a short snippet of the body content for search.
 	Excerpt string `json:"excerpt,omitempty"`
@@ -89,6 +98,12 @@ type GraphEdge struct {
 type BundleJSONData struct {
 	// Title is the overall name of the documentation catalog.
 	Title string `json:"title"`
+	// Description is the optional bundle overview from root index.md frontmatter (OKF v0.3 §8.1).
+	Description string `json:"description,omitempty"`
+	// OKFVersion is the targeted OKF spec version from root index.md frontmatter.
+	OKFVersion string `json:"okfVersion,omitempty"`
+	// License is the optional bundle license from root index.md frontmatter (OKF v0.3 §8.1).
+	License string `json:"license,omitempty"`
 	// Concepts maps each unique Concept ID to its lightweight index entry.
 	Concepts map[string]ConceptIndexEntry `json:"concepts"`
 	// Types lists all unique concept types present in the bundle.
@@ -133,8 +148,11 @@ func Generate(bundlePath, outputPath string) error {
 		logContent = string(data)
 	}
 
-	// Determine bundle title from index.md first heading or fallback to directory name
-	title := extractTitleFromMarkdown(indexContent)
+	// Determine bundle title from root index.md frontmatter, then first heading, then directory name
+	title := strings.TrimSpace(b.Title)
+	if title == "" {
+		title = extractTitleFromMarkdown(indexContent)
+	}
 	if title == "" {
 		title = filepath.Base(b.Path)
 		if title == "." || title == "" {
@@ -155,12 +173,15 @@ func Generate(bundlePath, outputPath string) error {
 
 	// 5. Build the lightweight bundle index (no concept bodies)
 	jsonData := BundleJSONData{
-		Title:    title,
-		Concepts: make(map[string]ConceptIndexEntry, len(b.Concepts)),
-		Types:    b.ListTypes(),
-		Tags:     b.ListTags(),
-		Index:    indexContent,
-		Log:      logContent,
+		Title:       title,
+		Description: b.Description,
+		OKFVersion:  b.OKFVersion,
+		License:     b.License,
+		Concepts:    make(map[string]ConceptIndexEntry, len(b.Concepts)),
+		Types:       b.ListTypes(),
+		Tags:        b.ListTags(),
+		Index:       indexContent,
+		Log:         logContent,
 	}
 
 	graph := assembly.BuildGraph(b)
@@ -183,18 +204,24 @@ func Generate(bundlePath, outputPath string) error {
 			}
 		}
 
+		ts := c.Frontmatter.Timestamp
+		if ts == "" && c.Frontmatter.Generated != nil {
+			ts = c.Frontmatter.Generated.At
+		}
+
 		jsonData.Concepts[id] = ConceptIndexEntry{
-			ID:          c.ID,
-			Type:        c.Frontmatter.Type,
-			Title:       c.Frontmatter.Title,
-			Description: c.Frontmatter.Desc,
-			Resource:    c.Frontmatter.Resource,
-			Tags:        c.Frontmatter.Tags,
-			Timestamp:   c.Frontmatter.Timestamp,
-			Status:      string(c.Frontmatter.Status),
-			TrustTier:   c.TrustTier(),
-			StaleAfter:  c.Frontmatter.StaleAfter,
-			Excerpt:     excerpt,
+			ID:           c.ID,
+			Type:         c.Frontmatter.Type,
+			Title:        c.Frontmatter.Title,
+			Description:  c.Frontmatter.Desc,
+			Resource:     c.Frontmatter.Resource,
+			Tags:         c.Frontmatter.Tags,
+			Timestamp:    ts,
+			Status:       string(c.Frontmatter.Status),
+			SupersededBy: c.Frontmatter.SupersededBy,
+			TrustTier:    c.TrustTier(),
+			StaleAfter:   c.Frontmatter.StaleAfter,
+			Excerpt:      excerpt,
 		}
 	}
 
@@ -206,29 +233,41 @@ func Generate(bundlePath, outputPath string) error {
 	// 6. Write individual concept JSON files concurrently
 	var g errgroup.Group
 	for id, c := range b.Concepts {
-		id, c := id, c
 		if c.ParseError != "" {
 			continue
 		}
 		g.Go(func() error {
+			ts := c.Frontmatter.Timestamp
+			if ts == "" && c.Frontmatter.Generated != nil {
+				ts = c.Frontmatter.Generated.At
+			}
+			sq := c.ResolvedQuery(b.Path)
 			cJSON := ConceptJSON{
-				ID:          c.ID,
-				Path:        c.Path,
-				Type:        c.Frontmatter.Type,
-				Title:       c.Frontmatter.Title,
-				Description: c.Frontmatter.Desc,
-				Resource:    c.Frontmatter.Resource,
-				Tags:        c.Frontmatter.Tags,
-				Timestamp:   c.Frontmatter.Timestamp,
-				Status:      string(c.Frontmatter.Status),
-				TrustTier:   c.TrustTier(),
-				StaleAfter:  c.Frontmatter.StaleAfter,
-				Sources:     c.Frontmatter.Sources,
-				Generated:   c.Frontmatter.Generated,
-				Verified:    c.Frontmatter.Verified,
-				Attestation: c.Frontmatter.Attestation,
-				Body:        c.Body,
-				Citations:   c.Citations,
+				ID:              c.ID,
+				Path:            c.Path,
+				Type:            c.Frontmatter.Type,
+				Title:           c.Frontmatter.Title,
+				Description:     c.Frontmatter.Desc,
+				Resource:        c.Frontmatter.Resource,
+				Tags:            c.Frontmatter.Tags,
+				Timestamp:       ts,
+				Status:          string(c.Frontmatter.Status),
+				SupersededBy:    c.Frontmatter.SupersededBy,
+				TrustTier:       c.TrustTier(),
+				StaleAfter:      c.Frontmatter.StaleAfter,
+				Sources:         c.Frontmatter.Sources,
+				UsageWindow:     c.Frontmatter.UsageWindow,
+				Generated:       c.Frontmatter.Generated,
+				Verified:        c.Frontmatter.Verified,
+				Runtime:         c.Frontmatter.Runtime,
+				Parameters:      c.Frontmatter.Parameters,
+				Computation:     c.Frontmatter.Computation,
+				Executor:        c.Frontmatter.Executor,
+				Attester:        c.Frontmatter.Attester,
+				SanctionedQuery: sq,
+				Attestation:     c.Frontmatter.Attestation,
+				Body:            c.Body,
+				Citations:       c.Citations,
 			}
 			cJSONBytes, err := json.Marshal(cJSON)
 			if err != nil {

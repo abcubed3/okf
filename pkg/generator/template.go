@@ -2,8 +2,8 @@
 package generator
 
 // HTMLTemplate is the single-page HTML, CSS, and JS application template for rendering
-// the interactive documentation catalog. It follows the viz.html design pattern from
-// https://github.com/GoogleCloudPlatform/knowledge-catalog/tree/main/okf/bundles —
+// the interactive documentation catalog. It follows the OKF viz.html design pattern from
+// https://github.com/open-knowledge-format/open-knowledge-format —
 // using Cytoscape.js for graph rendering as the primary navigation interface, a sidebar
 // for list-based navigation, and a right-hand detail panel for concept content.
 const HTMLTemplate = `<!DOCTYPE html>
@@ -1242,7 +1242,7 @@ async function loadDetail(id) {
         if (resp.ok) concept = await resp.json();
     } catch (_) { /* fall back to index entry */ }
 
-    // OKF v0.2 Trust Signals Rendering
+    // OKF v0.3 Trust, Lifecycle & Computation Signals Rendering
     var trustEl = document.getElementById('detail-trust');
     var trustHtml = '<div class="trust-section"><div class="trust-badges-row">';
     var hasTrustInfo = false;
@@ -1253,6 +1253,12 @@ async function loadDetail(id) {
         trustHtml += '<span class="trust-badge status-' + esc(statusVal) + '">● ' + esc(statusVal) + '</span>';
     }
 
+    var supBy = concept.supersededBy || meta.supersededBy || '';
+    if (supBy) {
+        hasTrustInfo = true;
+        trustHtml += '<span class="trust-badge status-deprecated">↪ Superseded by: ' + esc(supBy) + '</span>';
+    }
+
     var tierVal = (concept.trustTier || meta.trustTier || 'unverified').toLowerCase();
     hasTrustInfo = true;
     trustHtml += '<span class="trust-badge tier-' + esc(tierVal) + '">🛡️ ' + esc(tierVal) + '</span>';
@@ -1260,24 +1266,27 @@ async function loadDetail(id) {
     var staleStr = concept.staleAfter || meta.staleAfter;
     if (staleStr) {
         hasTrustInfo = true;
-        var isStale = new Date(staleStr) < new Date();
+        var isStale = new Date(staleStr) <= new Date();
         var fClass = isStale ? 'freshness-stale' : 'freshness-ok';
         var fIcon = isStale ? '⚠️ Stale' : '⏳ Fresh';
         trustHtml += '<span class="trust-badge ' + fClass + '">' + fIcon + ' (stale: ' + esc(staleStr) + ')</span>';
     }
     trustHtml += '</div>';
 
-    if (concept.attestation) {
+    var compRuntime = concept.runtime || (concept.attestation && concept.attestation.executor) || (concept.executor && concept.executor.resource) || '';
+    var compQuery = concept.sanctionedQuery || (concept.attestation && concept.attestation.query) || concept.computation || '';
+    var compAttester = (concept.attester && concept.attester.resource) || (concept.attestation && concept.attestation.attester) || '';
+    if (concept.attestation || concept.runtime || compQuery) {
         hasTrustInfo = true;
         trustHtml += '<div class="attestation-card"><strong>⚡ Attested Computation</strong>';
-        if (concept.attestation.executor) {
-            trustHtml += ' <span style="color:var(--muted)">(' + esc(concept.attestation.executor) + ')</span>';
+        if (compRuntime) {
+            trustHtml += ' <span style="color:var(--muted)">(' + esc(compRuntime) + ')</span>';
         }
-        if (concept.attestation.query) {
-            trustHtml += '<pre><code>' + esc(concept.attestation.query) + '</code></pre>';
+        if (compQuery) {
+            trustHtml += '<pre><code>' + esc(compQuery) + '</code></pre>';
         }
-        if (concept.attestation.attester) {
-            trustHtml += '<div style="color:var(--muted);font-size:10px;margin-top:4px">Attested by: ' + esc(concept.attestation.attester) + '</div>';
+        if (compAttester) {
+            trustHtml += '<div style="color:var(--muted);font-size:10px;margin-top:4px">Attester: ' + esc(compAttester) + '</div>';
         }
         trustHtml += '</div>';
     }
@@ -1295,7 +1304,7 @@ async function loadDetail(id) {
     // Rewrite internal markdown links to in-app navigation
     bodyEl.querySelectorAll('a[href]').forEach(function(a) {
         var href = a.getAttribute('href');
-        if (!href || href.startsWith('http') || href.startsWith('mailto:') || href.startsWith('#')) return;
+        if (!href || href.startsWith('http') || href.startsWith('//') || href.startsWith('mailto:') || href.startsWith('#')) return;
         var path = href.split('#')[0].replace(/\.md$/, '');
         var resolved = resolveConceptId(path, id);
         if (resolved && concepts[resolved]) {
@@ -1372,6 +1381,12 @@ async function loadDetail(id) {
  * to an absolute concept ID present in the bundle.
  */
 function resolveConceptId(path, fromId) {
+    if (!path) return null;
+    // OKF v0.3 leading "/" anchors at the bundle root
+    if (path.charAt(0) === '/') {
+        var rootId = path.replace(/^\/+/, '');
+        return concepts[rootId] ? rootId : null;
+    }
     if (concepts[path]) return path;
     // Relative resolution from fromId directory
     if (fromId) {

@@ -2,7 +2,7 @@
 
 Use this reference when creating a bundle from scratch. It supplements the
 workflow in `../SKILL.md`; the normative format details are in
-[spec-v02.md](./spec-v02.md).
+[spec-v03.md](./spec-v03.md).
 
 ## Structure
 
@@ -22,7 +22,7 @@ my-bundle/
 ```
 
 This skill recommends always creating a root `index.md` and `log.md`, although
-OKF v0.2 makes both optional.
+OKF v0.3 makes both optional.
 
 ## Concepts
 
@@ -52,7 +52,8 @@ For claims based on external sources, record only sources actually consulted in
 
 ```yaml
 sources:
-  - resource: https://example.com/billing-docs
+  - id: billing-docs
+    resource: https://example.com/billing-docs
     title: Billing documentation
 ```
 
@@ -72,12 +73,16 @@ existing link style; do not force reciprocal links. An index entry should link
 to a concept or subdirectory and, where available, use the concept's
 frontmatter description.
 
-The root `index.md` may declare the targeted format version in frontmatter.
-This skill's default is:
+The root `index.md` may declare the targeted format version, bundle title,
+description, and license in frontmatter (producers regenerating `index.md` must
+preserve this frontmatter). This skill's default is:
 
 ```markdown
 ---
-okf_version: "0.2"
+okf_version: "0.3"
+title: "My Knowledge Bundle"
+description: "Curated metrics, schemas, and playbooks."
+license: "Apache-2.0"
 ---
 
 # My Knowledge Bundle

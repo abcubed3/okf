@@ -45,11 +45,16 @@ func WriteConcepts(concepts []*bundle.Concept, outputDir string) error {
 				return fmt.Errorf("failed to create directory %q: %w", parentDir, err)
 			}
 
-			// Ensure OKF v0.2 Trust Signal defaults for harvested concepts
+			// Ensure OKF v0.3 Trust Signal defaults for harvested concepts
 			if c.Frontmatter.Generated == nil {
+				at := time.Now().UTC().Format(time.RFC3339)
+				if strings.TrimSpace(c.Frontmatter.Timestamp) != "" {
+					at = c.Frontmatter.Timestamp
+					c.Frontmatter.Timestamp = ""
+				}
 				c.Frontmatter.Generated = &bundle.ActorInfo{
-					By: "okf-harvester",
-					At: time.Now().Format(time.RFC3339),
+					By: "okf-harvester/v0.3",
+					At: at,
 				}
 			}
 			if c.Frontmatter.Status == "" {

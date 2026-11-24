@@ -2,6 +2,8 @@ package bundle_test
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -447,5 +449,353 @@ func TestConceptSanctionedQuery(t *testing.T) {
 	}
 	if got := cFenced.SanctionedQuery(); got != "SELECT COUNT(*) FROM users;" {
 		t.Errorf("SanctionedQuery() fenced = %q, want %q", got, "SELECT COUNT(*) FROM users;")
+	}
+}
+
+func TestV03CurrentOnlyTrustTiers(t *testing.T) {
+	tests := []struct {
+		name         string
+		generated    *bundle.ActorInfo
+		verified     bundle.ActorInfoList
+		wantTier     string
+		wantOutdated bool
+	}{
+		{
+			name:         "human review at same instant as generated.at is current",
+			generated:    &bundle.ActorInfo{By: "reference_agent/gemini", At: "2026-11-18T12:00:00Z"},
+			verified:     bundle.ActorInfoList{{By: "human:alice", At: "2026-11-18T12:00:00Z"}},
+			wantTier:     bundle.TrustTierHumanReviewed,
+			wantOutdated: false,
+		},
+		{
+			name:         "agent edit after human review demotes to unverified while preserving history",
+			generated:    &bundle.ActorInfo{By: "reference_agent/gemini", At: "2026-11-19T10:00:00Z"},
+			verified:     bundle.ActorInfoList{{By: "human:alice", At: "2026-11-18T12:00:00Z"}},
+			wantTier:     bundle.TrustTierUnverified,
+			wantOutdated: true,
+		},
+		{
+			name:      "agent edit after human review with newer process check demotes to machine-confirmed",
+			generated: &bundle.ActorInfo{By: "reference_agent/gemini", At: "2026-11-19T10:00:00Z"},
+			verified: bundle.ActorInfoList{
+				{By: "human:alice", At: "2026-11-18T12:00:00Z"},
+				{By: "process:ci-check", At: "2026-11-19T10:05:00Z"},
+			},
+			wantTier:     bundle.TrustTierMachineConfirmed,
+			wantOutdated: true,
+		},
+		{
+			name:         "team actor counts as machine-confirmed, not human-reviewed",
+			generated:    &bundle.ActorInfo{By: "human:author", At: "2026-11-18T12:00:00Z"},
+			verified:     bundle.ActorInfoList{{By: "team:finance", At: "2026-11-18T13:00:00Z"}},
+			wantTier:     bundle.TrustTierMachineConfirmed,
+			wantOutdated: false,
+		},
+		{
+			name:         "timezone offset equivalence (+02:00 equals earlier Z instant)",
+			generated:    &bundle.ActorInfo{By: "reference_agent/gemini", At: "2026-11-18T10:00:00Z"},
+			verified:     bundle.ActorInfoList{{By: "human:alice", At: "2026-11-18T12:00:00+02:00"}},
+			wantTier:     bundle.TrustTierHumanReviewed,
+			wantOutdated: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &bundle.Concept{
+				Frontmatter: bundle.Frontmatter{
+					Type:      "Metric",
+					Generated: tt.generated,
+					Verified:  tt.verified,
+				},
+			}
+			if got := c.TrustTier(); got != tt.wantTier {
+				t.Errorf("TrustTier() = %q, want %q", got, tt.wantTier)
+			}
+			if got := c.HasOutdatedVerifications(); got != tt.wantOutdated {
+				t.Errorf("HasOutdatedVerifications() = %v, want %v", got, tt.wantOutdated)
+			}
+		})
+	}
+}
+
+func TestV03NestedExtensionsAndCoercionRoundTrip(t *testing.T) {
+	input := `
+okf_version: 0.3
+license: CC-BY-4.0
+type: Attested Computation
+title: 12345
+tags: finance
+status: deprecated
+superseded_by: /metrics/net-revenue.md
+x-acme-owner: team:finance
+usage_window:
+  from: 2026-10-01T00:00:00Z
+  to: 2026-11-01T00:00:00Z
+  x-acme-window: rolling-30d
+sources:
+  resource: /references/policy.md
+  usage_window:
+    from: 2026-09-01T00:00:00Z
+    to: 2026-10-01T00:00:00Z
+  x-acme-source-tier: gold
+generated:
+  by: reference_agent/gemini
+  at: 2026-11-18T12:00:00Z
+  x-acme-trace: trace-99
+verified:
+  by: human:alice
+  at: 2026-11-18T13:00:00Z
+  x-acme-ticket: FIN-42
+runtime: bigquery
+parameters:
+  name: year
+  type: integer
+  required: true
+  x-acme-ui-hint: dropdown
+executor:
+  resource: /references/run.md
+  receipt: job_id
+  x-acme-timeout: 30s
+attester:
+  resource: /references/check.py
+  x-acme-strict: true
+`
+	var fm bundle.Frontmatter
+	if err := yaml.Unmarshal([]byte(input), &fm); err != nil {
+		t.Fatalf("yaml.Unmarshal failed: %v", err)
+	}
+	if fm.OKFVersion != "0.3" || fm.License != "CC-BY-4.0" || fm.Title != "12345" {
+		t.Fatalf("unexpected coerced scalars: okf_version=%q license=%q title=%q", fm.OKFVersion, fm.License, fm.Title)
+	}
+	if fm.SupersededBy != "/metrics/net-revenue.md" {
+		t.Errorf("SupersededBy = %q, want /metrics/net-revenue.md", fm.SupersededBy)
+	}
+	if len(fm.Tags) != 1 || fm.Tags[0] != "finance" {
+		t.Errorf("Tags coercion failed: %v", fm.Tags)
+	}
+	if len(fm.Sources) != 1 || fm.Sources[0].Extra["x-acme-source-tier"] != "gold" || fm.Sources[0].UsageWindow == nil {
+		t.Errorf("Sources coercion/extension failed: %+v", fm.Sources)
+	}
+	if fm.Executor == nil || len(fm.Executor.Receipt) != 1 || fm.Executor.Receipt[0] != "job_id" || fm.Executor.Extra["x-acme-timeout"] != "30s" {
+		t.Errorf("Executor coercion/extension failed: %+v", fm.Executor)
+	}
+	if fm.Generated == nil || fm.Generated.Extra["x-acme-trace"] != "trace-99" {
+		t.Errorf("Generated extension lost: %+v", fm.Generated)
+	}
+	if len(fm.Verified) != 1 || fm.Verified[0].Extra["x-acme-ticket"] != "FIN-42" {
+		t.Errorf("Verified extension lost: %+v", fm.Verified)
+	}
+	if len(fm.Parameters) != 1 || fm.Parameters[0].Extra["x-acme-ui-hint"] != "dropdown" {
+		t.Errorf("Parameters extension lost: %+v", fm.Parameters)
+	}
+	if fm.Attester == nil || fm.Attester.Extra["x-acme-strict"] != true {
+		t.Errorf("Attester extension lost: %+v", fm.Attester)
+	}
+
+	// Verify round-trip via FormatConceptMarkdown preserves all nested x-* keys
+	c := &bundle.Concept{
+		ID:             "computations/rev",
+		Path:           "computations/rev.md",
+		Frontmatter:    fm,
+		HasFrontmatter: true,
+		Body:           "# Computation\n\n```sql\nSELECT 1;\n```\n",
+	}
+	md, err := bundle.FormatConceptMarkdown(c)
+	if err != nil {
+		t.Fatalf("FormatConceptMarkdown failed: %v", err)
+	}
+	for _, wantSub := range []string{
+		"x-acme-owner: team:finance",
+		"x-acme-window: rolling-30d",
+		"x-acme-source-tier: gold",
+		"x-acme-trace: trace-99",
+		"x-acme-ticket: FIN-42",
+		"x-acme-ui-hint: dropdown",
+		"x-acme-timeout: 30s",
+		"x-acme-strict: true",
+		"superseded_by: /metrics/net-revenue.md",
+		"license: CC-BY-4.0",
+	} {
+		if !strings.Contains(md, wantSub) {
+			t.Errorf("round-tripped markdown missing %q:\n%s", wantSub, md)
+		}
+	}
+
+	// Exact boundary IsStale (now >= stale_after)
+	exactInstant := time.Date(2026, 11, 18, 0, 0, 0, 0, time.UTC)
+	cStaleBoundary := &bundle.Concept{
+		Frontmatter: bundle.Frontmatter{StaleAfter: "2026-11-18T00:00:00Z"},
+	}
+	if !cStaleBoundary.IsStale(exactInstant) {
+		t.Errorf("expected IsStale to be true when now == stale_after")
+	}
+}
+
+func TestReviewRegressions_TrustWriterMergeAndSymlinkContainment(t *testing.T) {
+	// 1. Malformed generated.at must fail closed in CurrentVerifications
+	cBadGen := &bundle.Concept{
+		Frontmatter: bundle.Frontmatter{
+			Generated: &bundle.ActorInfo{By: "agent/v1", At: "not-a-timestamp"},
+			Verified:  bundle.ActorInfoList{{By: "human:alice", At: "2026-11-18T12:00:00Z"}},
+		},
+	}
+	if cBadGen.TrustTier() != bundle.TrustTierUnverified {
+		t.Fatalf("expected malformed generated.at to fail closed to unverified, got %q", cBadGen.TrustTier())
+	}
+	if cBadGen.HasOutdatedVerifications() {
+		t.Fatalf("expected HasOutdatedVerifications=false when generated.at is unparseable")
+	}
+
+	// 2. Scalar verified YAML must return an unmarshal error rather than silently dropping to nil
+	var badFM bundle.Frontmatter
+	if err := yaml.Unmarshal([]byte("type: Metric\nverified: \"human:alice\"\n"), &badFM); err == nil {
+		t.Fatalf("expected unmarshal error on scalar verified value, got nil (%+v)", badFM.Verified)
+	}
+
+	// 3. FormatConceptMarkdown nil safety and zero-frontmatter handling
+	if _, err := bundle.FormatConceptMarkdown(nil); err == nil {
+		t.Fatalf("expected error on FormatConceptMarkdown(nil)")
+	}
+	emptyC := &bundle.Concept{ID: "notes", Path: "notes.md", Body: "# Plain body"}
+	formattedEmpty, err := bundle.FormatConceptMarkdown(emptyC)
+	if err != nil {
+		t.Fatalf("FormatConceptMarkdown failed: %v", err)
+	}
+	if strings.Contains(formattedEmpty, "{}") {
+		t.Fatalf("FormatConceptMarkdown emitted '{}' on zero frontmatter:\n%s", formattedEmpty)
+	}
+
+	// 4. MergeUnion recency prefers newer generated.at (including RFC3339Nano) over older verified[].at
+	// Put newer as source (c1) and older as target (c2) since equal timestamps favor target (c2).
+	newer := bundle.NewBundle("/src")
+	newer.Concepts["metrics/mrr"] = &bundle.Concept{
+		ID:   "metrics/mrr",
+		Path: "metrics/mrr.md",
+		Frontmatter: bundle.Frontmatter{
+			Type:      "Metric",
+			Title:     "New Edited Title",
+			Generated: &bundle.ActorInfo{By: "agent/v2", At: "2026-09-15T14:30:00.123456789Z"},
+			Verified:  bundle.ActorInfoList{{By: "process:ci", At: "2026-08-01T12:00:00Z"}},
+		},
+		Body: "new body",
+	}
+	older := bundle.NewBundle("/dst")
+	older.Concepts["metrics/mrr"] = &bundle.Concept{
+		ID:   "metrics/mrr",
+		Path: "metrics/mrr.md",
+		Frontmatter: bundle.Frontmatter{
+			Type:      "Metric",
+			Title:     "Old Title",
+			Generated: &bundle.ActorInfo{By: "agent/v1", At: "2026-08-05T10:00:00Z"},
+			Verified:  bundle.ActorInfoList{{By: "process:ci", At: "2026-08-01T12:00:00Z"}},
+		},
+		Body: "old body",
+	}
+	merged, err := bundle.Merge(newer, older, bundle.MergeUnion)
+	if err != nil {
+		t.Fatalf("Merge failed: %v", err)
+	}
+	if merged.Concepts["metrics/mrr"].Body != "new body" {
+		t.Errorf("expected newer generated.at revision to win when both unverified/outdated, got body=%q", merged.Concepts["metrics/mrr"].Body)
+	}
+
+	// 5. Symlink write containment in WriteBundle and MigrateBundleToV03
+	outsideDir := t.TempDir()
+	secretFile := filepath.Join(outsideDir, "secret.md")
+	if err := os.WriteFile(secretFile, []byte("DO NOT OVERWRITE"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	bundleDir := t.TempDir()
+	symlinkPath := filepath.Join(bundleDir, "evil.md")
+	if err := os.Symlink(secretFile, symlinkPath); err != nil {
+		t.Skipf("symlink not supported in test environment: %v", err)
+	}
+
+	bSym := bundle.NewBundle(bundleDir)
+	bSym.Concepts["evil"] = &bundle.Concept{
+		ID:             "evil",
+		Path:           "evil.md",
+		HasFrontmatter: true,
+		Frontmatter:    bundle.Frontmatter{Type: "Metric", Timestamp: "2026-01-01"},
+		Body:           "overwritten",
+	}
+	if err := bundle.WriteBundle(bSym, bundleDir); err == nil {
+		t.Fatalf("expected WriteBundle to reject overwriting symlink target")
+	}
+	if _, err := bundle.MigrateBundleToV03(bSym, false); err == nil {
+		t.Fatalf("expected MigrateBundleToV03 to reject overwriting symlink target")
+	}
+	secretBytes, err := os.ReadFile(secretFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(secretBytes) != "DO NOT OVERWRITE" {
+		t.Fatalf("external file was modified via symlink: %q", string(secretBytes))
+	}
+
+	// 6. MigrateBundleToV03 handles standalone sources[].uri, single-segment root links, nested index, and skips code spans/fences
+	migDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(migDir, "metrics"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(migDir, "glossary.md"), []byte("---\ntype: Glossary\ntitle: Glossary\ndescription: Terms\n---\n# Glossary\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mrrRaw := "---\ntype: Metric\ntitle: MRR\ndescription: Revenue\nsources:\n  - uri: https://stripe.com/docs\n---\nSee [Glossary](glossary.md) and ``code ` [Ignore](glossary.md)``.\n\n~~~\n[FenceIgnore](glossary.md)\n~~~\n"
+	if err := os.WriteFile(filepath.Join(migDir, "metrics", "mrr.md"), []byte(mrrRaw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	nestedIdxRaw := "# Metrics\nSee [Glossary](glossary.md).\n"
+	if err := os.WriteFile(filepath.Join(migDir, "metrics", "index.md"), []byte(nestedIdxRaw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	bMig := bundle.NewBundle(migDir)
+	var mrrFM bundle.Frontmatter
+	if err := yaml.Unmarshal([]byte("type: Metric\ntitle: MRR\ndescription: Revenue\nsources:\n  - uri: https://stripe.com/docs\n"), &mrrFM); err != nil {
+		t.Fatal(err)
+	}
+	bMig.Concepts["metrics/mrr"] = &bundle.Concept{
+		ID:             "metrics/mrr",
+		Path:           filepath.FromSlash("metrics/mrr.md"),
+		HasFrontmatter: true,
+		Frontmatter:    mrrFM,
+		Body:           "See [Glossary](glossary.md) and ``code ` [Ignore](glossary.md)``.\n\n~~~\n[FenceIgnore](glossary.md)\n~~~\n",
+	}
+	bMig.IndexFiles["metrics/index.md"] = &bundle.Concept{
+		ID:   "metrics/index",
+		Path: filepath.FromSlash("metrics/index.md"),
+		Body: nestedIdxRaw,
+	}
+
+	rep, err := bundle.MigrateBundleToV03(bMig, false)
+	if err != nil {
+		t.Fatalf("MigrateBundleToV03 failed: %v", err)
+	}
+	if rep.Updated != 2 {
+		t.Fatalf("expected 2 updated files (metrics/mrr.md and metrics/index.md), got %d: %+v", rep.Updated, rep.Files)
+	}
+	migratedMRRBytes, err := os.ReadFile(filepath.Join(migDir, "metrics", "mrr.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	migratedMRR := string(migratedMRRBytes)
+	if strings.Contains(migratedMRR, "uri:") || !strings.Contains(migratedMRR, "resource: https://stripe.com/docs") {
+		t.Errorf("expected sources[].uri to be rewritten to resource:, got:\n%s", migratedMRR)
+	}
+	if !strings.Contains(migratedMRR, "See [Glossary](/glossary.md)") {
+		t.Errorf("expected single-segment root link to be anchored to /glossary.md, got:\n%s", migratedMRR)
+	}
+	if !strings.Contains(migratedMRR, "``code ` [Ignore](glossary.md)``") || !strings.Contains(migratedMRR, "[FenceIgnore](glossary.md)") {
+		t.Errorf("expected links inside double-backtick code span and tilde fence to remain untouched, got:\n%s", migratedMRR)
+	}
+	migratedIdxBytes, err := os.ReadFile(filepath.Join(migDir, "metrics", "index.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(migratedIdxBytes), "[Glossary](/glossary.md)") {
+		t.Errorf("expected nested index.md root link to be anchored, got:\n%s", string(migratedIdxBytes))
 	}
 }

@@ -98,12 +98,21 @@ func PublishBundleWithID(bundlePath, bundleID, host, apiKey string) error {
 		return err
 	}
 
+	bundleName := strings.TrimSpace(b.Title)
+	if bundleName == "" {
+		bundleName = canonicalID
+	}
+	bundleDesc := strings.TrimSpace(b.Description)
+	if bundleDesc == "" {
+		bundleDesc = "Published OKF Bundle: " + canonicalID
+	}
+
 	// 2. Map to PublishPayload (matches proto structure)
 	payload := PublishPayload{
 		Bundle: BundlePayload{
 			ID:          canonicalID,
-			Name:        canonicalID,
-			Description: "Published OKF Bundle: " + canonicalID,
+			Name:        bundleName,
+			Description: bundleDesc,
 			Concepts:    make([]PublishConcept, 0, len(b.Concepts)),
 			Links:       make([]GraphEdge, 0),
 		},

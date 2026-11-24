@@ -24,7 +24,7 @@ for platform details.
 
 | Command                | Purpose                                                      | Common Options                                                                      |
 | :--------------------- | :----------------------------------------------------------- | :---------------------------------------------------------------------------------- |
-| `okf lint [path]`      | Validate YAML frontmatter, trust signals, and link integrity | `--strict`, `--host`, `--api-key`                                                   |
+| `okf lint [path]`      | Validate YAML frontmatter, trust signals, and link integrity | `--strict`, `--migrate-v03`, `--dry-run`, `--host`, `--api-key`                     |
 | `okf assemble <id>`    | BFS context assembly starting from concept ID                | `--bundle`, `--depth 2`, `--max-chars 16000`, `--format xml\|markdown`, `--monitor` |
 | `okf harvest <source>` | Harvest schemas from `db`, `openapi`, `proto`, `git`, or `web` | `--output`, `--ai-enrich`, `--model`, `--api-key`                                   |
 | `okf mcp`              | Run Model Context Protocol server                            | `--bundle`, `--transport stdio\|http`, `--port 8080`, `--remote`                    |

@@ -171,12 +171,15 @@ func (h *DBHarvester) buildTableConcept(
 		ID:   conceptID,
 		Path: conceptPath,
 		Frontmatter: bundle.Frontmatter{
-			Type:      fmt.Sprintf("%s Table", dbType),
-			Title:     title,
-			Desc:      table.Description,
-			Resource:  table.Name,
-			Tags:      tags,
-			Timestamp: timestamp,
+			Type:     fmt.Sprintf("%s Table", dbType),
+			Title:    title,
+			Desc:     table.Description,
+			Resource: table.Name,
+			Tags:     tags,
+			Generated: &bundle.ActorInfo{
+				By: "okf-harvester/v0.3",
+				At: timestamp,
+			},
 		},
 		Body: body.String(),
 	}

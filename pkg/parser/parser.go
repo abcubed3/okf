@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 
@@ -19,6 +20,8 @@ import (
 )
 
 const DefaultMaxFileSize = 10 * 1024 * 1024 // 10MB
+
+var citationLineRe = regexp.MustCompile(`^\[(\d+)\]\s+(?:\[([^\]]+)\]\(([^)]+)\)|(\S+))`)
 
 // ParseOptions configures the parser settings.
 type ParseOptions struct {
@@ -101,20 +104,26 @@ func ParseBundleWithOptions(ctx context.Context, rootPath string, opts ParseOpti
 
 		filename := filepath.Base(relPath)
 		// Skip reserved files from being parsed as regular concepts.
-		// However, index.md files are recorded for link resolution/validation,
-		// and the root index.md might contain okf_version.
+		// Record index.md and log.md files for metadata extraction, structural conformance, and link checks.
 		if filename == "index.md" || filename == "log.md" {
-			if filename == "index.md" {
-				relSlash := filepath.ToSlash(relPath)
-				id := strings.TrimSuffix(relSlash, ".md")
-				var idxConcept *bundle.Concept
-				if info.Size() > opts.MaxFileSize {
-					idxConcept = &bundle.Concept{
+			relSlash := filepath.ToSlash(relPath)
+			id := strings.TrimSuffix(relSlash, ".md")
+			var reservedDoc *bundle.Concept
+			if info.Size() > opts.MaxFileSize {
+				reservedDoc = &bundle.Concept{
+					ID:         id,
+					Path:       relPath,
+					ParseError: fmt.Sprintf("file size %d bytes exceeds the limit of %d bytes", info.Size(), opts.MaxFileSize),
+				}
+			} else {
+				f, openErr := os.Open(path)
+				if openErr != nil {
+					reservedDoc = &bundle.Concept{
 						ID:         id,
 						Path:       relPath,
-						ParseError: fmt.Sprintf("file size %d bytes exceeds the limit of %d bytes", info.Size(), opts.MaxFileSize),
+						ParseError: openErr.Error(),
 					}
-				} else if f, openErr := os.Open(path); openErr == nil {
+				} else {
 					c, parseErr := parseConceptReaderWithLimit(f, relPath, id, opts.MaxFileSize)
 					f.Close()
 					if parseErr != nil {
@@ -123,13 +132,20 @@ func ParseBundleWithOptions(ctx context.Context, rootPath string, opts ParseOpti
 						}
 						c.ParseError = parseErr.Error()
 					}
-					idxConcept = c
+					reservedDoc = c
 				}
-				if idxConcept != nil {
-					if relSlash == "index.md" && idxConcept.ParseError == "" {
-						b.OKFVersion = idxConcept.Frontmatter.OKFVersion
+			}
+			if reservedDoc != nil {
+				if filename == "index.md" {
+					if relSlash == "index.md" && reservedDoc.ParseError == "" {
+						b.OKFVersion = reservedDoc.Frontmatter.OKFVersion
+						b.Title = reservedDoc.Frontmatter.Title
+						b.Description = reservedDoc.Frontmatter.Desc
+						b.License = reservedDoc.Frontmatter.License
 					}
-					b.IndexFiles[relSlash] = idxConcept
+					b.IndexFiles[relSlash] = reservedDoc
+				} else {
+					b.LogFiles[relSlash] = reservedDoc
 				}
 			}
 			return nil
@@ -226,10 +242,21 @@ func ParseBundleWithOptions(ctx context.Context, rootPath string, opts ParseOpti
 		close(resultsChan)
 	}()
 
-	// Collect parsed concepts
+	// Collect parsed concepts; per OKF v0.3 §4.1 & §11, non-reserved .md files without
+	// parseable YAML errors that lack frontmatter or a non-empty 'type' field (such as
+	// README.md, AGENTS.md, CONTRIBUTING.md, or SKILL.md) are skipped as non-concepts.
 	for concept := range resultsChan {
+		if concept.ParseError != "" {
+			b.Concepts[concept.ID] = concept
+			continue
+		}
+		if !concept.HasFrontmatter || strings.TrimSpace(concept.Frontmatter.Type) == "" {
+			b.SkippedFiles = append(b.SkippedFiles, filepath.ToSlash(concept.Path))
+			continue
+		}
 		b.Concepts[concept.ID] = concept
 	}
+	slices.Sort(b.SkippedFiles)
 
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return nil, ctxErr
@@ -298,7 +325,7 @@ func parseConceptReaderWithLimit(r io.Reader, relPath, conceptID string, maxFile
 
 		if lineCount == 1 {
 			line = strings.TrimPrefix(line, "\uFEFF")
-			if strings.TrimSpace(line) == "---" {
+			if strings.TrimRight(line, " \t\r") == "---" {
 				hasFrontmatter = true
 				continue
 			}
@@ -307,7 +334,7 @@ func parseConceptReaderWithLimit(r io.Reader, relPath, conceptID string, maxFile
 		}
 
 		if hasFrontmatter && !frontmatterChecked {
-			if strings.TrimSpace(line) == "---" {
+			if strings.TrimRight(line, " \t\r") == "---" {
 				frontmatterChecked = true
 				continue
 			}
@@ -329,8 +356,9 @@ func parseConceptReaderWithLimit(r io.Reader, relPath, conceptID string, maxFile
 
 	if hasFrontmatter && !frontmatterChecked {
 		return &bundle.Concept{
-			ID:   conceptID,
-			Path: relPath,
+			ID:             conceptID,
+			Path:           relPath,
+			HasFrontmatter: true,
 		}, fmt.Errorf("unclosed frontmatter '---' fence")
 	}
 
@@ -344,20 +372,22 @@ func parseConceptReaderWithLimit(r io.Reader, relPath, conceptID string, maxFile
 		if err != nil {
 			// If YAML parsing fails, return the concept with the error, so validation can catch it
 			return &bundle.Concept{
-				ID:        conceptID,
-				Path:      relPath,
-				Body:      body,
-				Citations: citations,
+				ID:             conceptID,
+				Path:           relPath,
+				HasFrontmatter: true,
+				Body:           body,
+				Citations:      citations,
 			}, fmt.Errorf("failed to parse frontmatter YAML: %w", err)
 		}
 	}
 
 	return &bundle.Concept{
-		ID:          conceptID,
-		Path:        relPath,
-		Frontmatter: fm,
-		Body:        body,
-		Citations:   citations,
+		ID:             conceptID,
+		Path:           relPath,
+		Frontmatter:    fm,
+		HasFrontmatter: hasFrontmatter,
+		Body:           body,
+		Citations:      citations,
 	}, nil
 }
 
@@ -366,12 +396,6 @@ func ParseCitationsFromMarkdown(body string) []bundle.Citation {
 	var citations []bundle.Citation
 	lines := strings.Split(body, "\n")
 	inCitations := false
-
-	// Regex matching:
-	// Group 1: Citation Number
-	// Group 2 & 3: Link title and Link URI (if formatted as [Title](URI))
-	// Group 4: Raw URI (if formatted as plain URL/path)
-	re := regexp.MustCompile(`^\[(\d+)\]\s+(?:\[([^\]]+)\]\(([^)]+)\)|(\S+))`)
 
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -391,7 +415,7 @@ func ParseCitationsFromMarkdown(body string) []bundle.Citation {
 		}
 
 		if inCitations {
-			matches := re.FindStringSubmatch(line)
+			matches := citationLineRe.FindStringSubmatch(line)
 			if len(matches) > 0 {
 				var numVal int
 				_, _ = fmt.Sscanf(matches[1], "%d", &numVal)

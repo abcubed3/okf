@@ -3,16 +3,21 @@ package bundle
 import (
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"sort"
 	"time"
 )
 
+// MergeStrategy defines how conflicting concepts are reconciled during bundle merges.
 type MergeStrategy string
 
 const (
-	MergeUnion  MergeStrategy = "union"
-	MergeOurs   MergeStrategy = "ours"
+	// MergeUnion reconciles matching concepts by trust tier, freshness, and timestamp, unioning tags.
+	MergeUnion MergeStrategy = "union"
+	// MergeOurs retains the source bundle's concept when both bundles define the same concept ID.
+	MergeOurs MergeStrategy = "ours"
+	// MergeTheirs retains the target bundle's concept when both bundles define the same concept ID.
 	MergeTheirs MergeStrategy = "theirs"
 )
 
@@ -44,6 +49,18 @@ func MergeWithOptions(source, target *Bundle, strategy MergeStrategy, opts Merge
 	merged.OKFVersion = source.OKFVersion
 	if merged.OKFVersion == "" {
 		merged.OKFVersion = target.OKFVersion
+	}
+	merged.Title = source.Title
+	if merged.Title == "" {
+		merged.Title = target.Title
+	}
+	merged.Description = source.Description
+	if merged.Description == "" {
+		merged.Description = target.Description
+	}
+	merged.License = source.License
+	if merged.License == "" {
+		merged.License = target.License
 	}
 
 	// 1. Copy all source concepts (deep copy)
@@ -81,12 +98,58 @@ func MergeWithOptions(source, target *Bundle, strategy MergeStrategy, opts Merge
 			return nil, fmt.Errorf("failed to reconcile index file %s: %w", relPath, err)
 		}
 		merged.IndexFiles[relPath] = reconciled
-		if relPath == "index.md" && reconciled != nil && reconciled.Frontmatter.OKFVersion != "" {
-			merged.OKFVersion = reconciled.Frontmatter.OKFVersion
+		if relPath == "index.md" && reconciled != nil {
+			if reconciled.Frontmatter.OKFVersion != "" {
+				merged.OKFVersion = reconciled.Frontmatter.OKFVersion
+			}
+			if reconciled.Frontmatter.Title != "" {
+				merged.Title = reconciled.Frontmatter.Title
+			}
+			if reconciled.Frontmatter.Desc != "" {
+				merged.Description = reconciled.Frontmatter.Desc
+			}
+			if reconciled.Frontmatter.License != "" {
+				merged.License = reconciled.Frontmatter.License
+			}
 		}
 	}
 
+	// 4. Copy and merge LogFiles
+	for relPath, lg := range source.LogFiles {
+		merged.LogFiles[relPath] = copyConcept(lg)
+	}
+	for relPath, targetLg := range target.LogFiles {
+		sourceLg, exists := merged.LogFiles[relPath]
+		if !exists {
+			merged.LogFiles[relPath] = copyConcept(targetLg)
+			continue
+		}
+		reconciled, err := reconcileConcepts(sourceLg, targetLg, strategy, opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to reconcile log file %s: %w", relPath, err)
+		}
+		merged.LogFiles[relPath] = reconciled
+	}
+
 	return merged, nil
+}
+
+func cloneExtraMap(m map[string]any) map[string]any {
+	if len(m) == 0 {
+		return nil
+	}
+	return maps.Clone(m)
+}
+
+func cloneUsageWindow(uw *UsageWindow) *UsageWindow {
+	if uw == nil {
+		return nil
+	}
+	return &UsageWindow{
+		From:  uw.From,
+		To:    uw.To,
+		Extra: cloneExtraMap(uw.Extra),
+	}
 }
 
 func copyConcept(c *Concept) *Concept {
@@ -94,23 +157,27 @@ func copyConcept(c *Concept) *Concept {
 		return nil
 	}
 	newC := &Concept{
-		ID:         c.ID,
-		Path:       c.Path,
-		Body:       c.Body,
-		ParseError: c.ParseError,
+		ID:             c.ID,
+		Path:           c.Path,
+		Body:           c.Body,
+		HasFrontmatter: c.HasFrontmatter,
+		ParseError:     c.ParseError,
 	}
 
 	fm := Frontmatter{
-		OKFVersion:  c.Frontmatter.OKFVersion,
-		Type:        c.Frontmatter.Type,
-		Title:       c.Frontmatter.Title,
-		Desc:        c.Frontmatter.Desc,
-		Resource:    c.Frontmatter.Resource,
-		Timestamp:   c.Frontmatter.Timestamp,
-		Status:      c.Frontmatter.Status,
-		StaleAfter:  c.Frontmatter.StaleAfter,
-		Runtime:     c.Frontmatter.Runtime,
-		Computation: c.Frontmatter.Computation,
+		OKFVersion:   c.Frontmatter.OKFVersion,
+		License:      c.Frontmatter.License,
+		Type:         c.Frontmatter.Type,
+		Title:        c.Frontmatter.Title,
+		Desc:         c.Frontmatter.Desc,
+		Resource:     c.Frontmatter.Resource,
+		Timestamp:    c.Frontmatter.Timestamp,
+		Status:       c.Frontmatter.Status,
+		SupersededBy: c.Frontmatter.SupersededBy,
+		StaleAfter:   c.Frontmatter.StaleAfter,
+		UsageWindow:  cloneUsageWindow(c.Frontmatter.UsageWindow),
+		Runtime:      c.Frontmatter.Runtime,
+		Computation:  c.Frontmatter.Computation,
 	}
 
 	if c.Frontmatter.Tags != nil {
@@ -119,22 +186,39 @@ func copyConcept(c *Concept) *Concept {
 	}
 	if c.Frontmatter.Sources != nil {
 		fm.Sources = make([]Source, len(c.Frontmatter.Sources))
-		copy(fm.Sources, c.Frontmatter.Sources)
+		for i, src := range c.Frontmatter.Sources {
+			srcCopy := src
+			srcCopy.UsageWindow = cloneUsageWindow(src.UsageWindow)
+			srcCopy.Extra = cloneExtraMap(src.Extra)
+			fm.Sources[i] = srcCopy
+		}
 	}
 	if c.Frontmatter.Parameters != nil {
 		fm.Parameters = make([]Parameter, len(c.Frontmatter.Parameters))
-		copy(fm.Parameters, c.Frontmatter.Parameters)
+		for i, p := range c.Frontmatter.Parameters {
+			pCopy := p
+			pCopy.Extra = cloneExtraMap(p.Extra)
+			fm.Parameters[i] = pCopy
+		}
 	}
 	if c.Frontmatter.Generated != nil {
 		g := *c.Frontmatter.Generated
+		g.Extra = cloneExtraMap(c.Frontmatter.Generated.Extra)
 		fm.Generated = &g
 	}
 	if c.Frontmatter.Verified != nil {
 		fm.Verified = make(ActorInfoList, len(c.Frontmatter.Verified))
-		copy(fm.Verified, c.Frontmatter.Verified)
+		for i, v := range c.Frontmatter.Verified {
+			vCopy := v
+			vCopy.Extra = cloneExtraMap(v.Extra)
+			fm.Verified[i] = vCopy
+		}
 	}
 	if c.Frontmatter.Executor != nil {
-		ex := Executor{Resource: c.Frontmatter.Executor.Resource}
+		ex := Executor{
+			Resource: c.Frontmatter.Executor.Resource,
+			Extra:    cloneExtraMap(c.Frontmatter.Executor.Extra),
+		}
 		if c.Frontmatter.Executor.Receipt != nil {
 			ex.Receipt = make([]string, len(c.Frontmatter.Executor.Receipt))
 			copy(ex.Receipt, c.Frontmatter.Executor.Receipt)
@@ -143,18 +227,14 @@ func copyConcept(c *Concept) *Concept {
 	}
 	if c.Frontmatter.Attester != nil {
 		at := *c.Frontmatter.Attester
+		at.Extra = cloneExtraMap(c.Frontmatter.Attester.Extra)
 		fm.Attester = &at
 	}
 	if c.Frontmatter.Attestation != nil {
 		att := *c.Frontmatter.Attestation
 		fm.Attestation = &att
 	}
-	if c.Frontmatter.Extra != nil {
-		fm.Extra = make(map[string]interface{}, len(c.Frontmatter.Extra))
-		for k, v := range c.Frontmatter.Extra {
-			fm.Extra[k] = v
-		}
-	}
+	fm.Extra = cloneExtraMap(c.Frontmatter.Extra)
 	newC.Frontmatter = fm
 
 	if c.Citations != nil {
@@ -267,7 +347,7 @@ func reconcileConcepts(c1, c2 *Concept, strategy MergeStrategy, opts MergeOption
 		// 3. Only backfill Extra keys when trust tiers are equal (never from lower-trust override)
 		if !strictlyHigherTrust && len(override.Frontmatter.Extra) > 0 {
 			if res.Frontmatter.Extra == nil {
-				res.Frontmatter.Extra = make(map[string]interface{})
+				res.Frontmatter.Extra = make(map[string]any)
 			}
 			for k, v := range override.Frontmatter.Extra {
 				if _, exists := res.Frontmatter.Extra[k]; !exists {
@@ -283,14 +363,14 @@ func reconcileConcepts(c1, c2 *Concept, strategy MergeStrategy, opts MergeOption
 	}
 }
 
-// isConceptNewer breaks ties using Timestamp -> latest verified[].at -> generated.at.
-// On equal or unparseable timestamps, ties favor c2 (target).
+// isConceptNewer compares the most recent recorded activity timestamp across Timestamp,
+// generated.at, and verified[].at. On equal or unparseable timestamps, ties favor c2 (target).
 func isConceptNewer(c1, c2 *Concept) bool {
 	s1 := effectiveTimestamp(c1)
 	s2 := effectiveTimestamp(c2)
 
-	t1, ok1 := parseFlexTime(s1)
-	t2, ok2 := parseFlexTime(s2)
+	t1, ok1 := ParseOKFTimestamp(s1)
+	t2, ok2 := ParseOKFTimestamp(s2)
 
 	if ok1 && ok2 {
 		return t1.After(t2)
@@ -308,42 +388,39 @@ func effectiveTimestamp(c *Concept) string {
 	if c == nil {
 		return ""
 	}
+
+	var candidates []string
 	if c.Frontmatter.Timestamp != "" {
-		return c.Frontmatter.Timestamp
+		candidates = append(candidates, c.Frontmatter.Timestamp)
 	}
-	var latest time.Time
-	var latestRaw string
+	if c.Frontmatter.Generated != nil && c.Frontmatter.Generated.At != "" {
+		candidates = append(candidates, c.Frontmatter.Generated.At)
+	}
 	for _, v := range c.Frontmatter.Verified {
-		if v.At == "" {
-			continue
-		}
-		if t, ok := parseFlexTime(v.At); ok {
-			if latestRaw == "" || t.After(latest) {
-				latest = t
-				latestRaw = v.At
-			}
-		} else if latestRaw == "" {
-			latestRaw = v.At
+		if v.At != "" {
+			candidates = append(candidates, v.At)
 		}
 	}
-	if latestRaw != "" {
+
+	var latest time.Time
+	hasParsed := false
+	latestRaw := ""
+	fallbackRaw := ""
+
+	for _, raw := range candidates {
+		if fallbackRaw == "" {
+			fallbackRaw = raw
+		}
+		if t, ok := ParseOKFTimestamp(raw); ok {
+			if !hasParsed || t.After(latest) {
+				latest = t
+				latestRaw = raw
+				hasParsed = true
+			}
+		}
+	}
+	if hasParsed {
 		return latestRaw
 	}
-	if c.Frontmatter.Generated != nil {
-		return c.Frontmatter.Generated.At
-	}
-	return ""
-}
-
-func parseFlexTime(raw string) (time.Time, bool) {
-	if raw == "" {
-		return time.Time{}, false
-	}
-	if t, err := time.Parse(time.RFC3339, raw); err == nil {
-		return t, true
-	}
-	if t, err := time.Parse("2006-01-02", raw); err == nil {
-		return t, true
-	}
-	return time.Time{}, false
+	return fallbackRaw
 }

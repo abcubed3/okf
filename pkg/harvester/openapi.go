@@ -280,12 +280,15 @@ func (h *OpenAPIHarvester) buildEndpointConcept(path, method string, op *openapi
 		ID:   conceptID,
 		Path: conceptPath,
 		Frontmatter: bundle.Frontmatter{
-			Type:      "API Endpoint",
-			Title:     title,
-			Desc:      desc,
-			Resource:  path,
-			Tags:      []string{"api", "endpoint", strings.ToLower(method)},
-			Timestamp: timestamp,
+			Type:     "API Endpoint",
+			Title:    title,
+			Desc:     desc,
+			Resource: path,
+			Tags:     []string{"api", "endpoint", strings.ToLower(method)},
+			Generated: &bundle.ActorInfo{
+				By: "okf-harvester/v0.3",
+				At: timestamp,
+			},
 		},
 		Body: body.String(),
 	}

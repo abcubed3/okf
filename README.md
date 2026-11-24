@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://github.com/abcubed3/okf/releases/tag/v1.0.9"><img src="https://img.shields.io/badge/release-v1.0.9-blue.svg" alt="Release v1.0.9" /></a>
-  <a href="https://github.com/GoogleCloudPlatform/knowledge-catalog"><img src="https://img.shields.io/badge/OKF%20Spec-v0.2-green.svg" alt="OKF Spec v0.2" /></a>
+  <a href="https://github.com/open-knowledge-format/open-knowledge-format"><img src="https://img.shields.io/badge/OKF%20Spec-v0.3-green.svg" alt="OKF Spec v0.3" /></a>
   <a href="https://ghcr.io/abcubed3/okf"><img src="https://img.shields.io/badge/container-ghcr.io-blue.svg" alt="Docker Container" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License" /></a>
 </p>
@@ -21,17 +21,17 @@
 > **🚀 Highlights & Recent Capabilities (v1.0.x):**
 >
 > - **Multi-Arch Container Distribution (`ghcr.io/abcubed3/okf:latest`)**: Official distroless images for Linux AMD64 and ARM64 published to GitHub Container Registry, ready for CI linting and containerized MCP servers.
-> - **Strict Conformance Linter (`okf lint --strict`)**: Elevate soft validation warnings (missing titles/descriptions, unverified links) to hard errors to enforce zero-defect quality gates in CI/CD pipelines.
-> - **Opinionated AI Agent Skill (`okf skill`)**: Compile any knowledge bundle into an active `SKILL.md` or install the official OKF skill (`okf skill install`) with embedded references (`spec-v02.md`, `create-bundle.md`, `cli-cheatsheet.md`) and examples for Antigravity, Claude Code, Cursor, Windsurf, and Codex.
-> - **Grounded AI Q&A (`okf ask`)**: Natural language question answering directly from the CLI backed by deterministic BFS context assembly and Gemini generative AI, citing verified concept files and verbatim attested computations.
-> - **Attested Computation & Trust Layer (OKF Spec v0.2)**: Native support for provenance (`sources`), freshness (`stale_after`), verification tiers (`generated`/`verified`), and reproducible computations (`type: Attested Computation`).
+> - **Strict Conformance Linter & Migrator (`okf lint --strict` / `--migrate-v03`)**: Elevate soft validation warnings to hard CI quality gates and automatically upgrade v0.1/v0.2 bundles to OKF v0.3 (`--migrate-v03`, `--dry-run`).
+> - **Opinionated AI Agent Skill (`okf skill`)**: Compile any knowledge bundle into an active `SKILL.md` or install the official OKF skill (`okf skill install`) with embedded references (`spec-v03.md`, `spec-v02.md`, `create-bundle.md`, `cli-cheatsheet.md`) and examples for Antigravity, Claude Code, Cursor, Windsurf, and Codex.
+> - **Grounded AI Q&A (`okf ask`)**: Natural language question answering directly from the CLI backed by deterministic BFS context assembly and Gemini generative AI, automatically following `superseded_by` lifecycle replacements and citing verified concepts and verbatim attested computations.
+> - **OKF Spec v0.3 Governance, Coexistence & Trust Layer**: Native support for provenance (`sources`, `usage_window`, footnotes), current-only verification tiers (`verified.at >= generated.at`), freshness (`stale_after`), lifecycle replacement (`superseded_by`), licensing (`license`), lossless `x-*` extensions, non-concept Markdown coexistence (`README.md`, `AGENTS.md`, `SKILL.md`), and reproducible computations (`type: Attested Computation`).
 > - **Unified CLI Architecture**: All toolchains (`lint`, `harvest`, `assemble`, `mcp` / `server`, `skill`, `ask`, `doc`, `lsp`, `sync`, `export`, `diff`, `merge`, `publish`, `push`, `pull`, `search`, `auth`) consolidated into a single, high-performance `okf` executable.
 
 ## System Overview
 
-The **Open Knowledge Format (OKF)** is a vendor-neutral, lightweight specification for structuring organizational knowledge (documentation, runbooks, metrics, database schemas, and API definitions) into machine-readable, human-friendly Markdown files.
+The **Open Knowledge Format (OKF)** is a vendor-neutral, lightweight specification ([okf.md](https://okf.md)) for structuring organizational knowledge (documentation, runbooks, metrics, database schemas, and API definitions) into machine-readable, human-friendly Markdown files.
 
-By representing knowledge as a directory of Markdown files with structured YAML frontmatter, OKF bridges the gap between structured metadata repositories and unstructured text documentation, serving as an ideal substrate for **AI agents**, **Retrieval-Augmented Generation (RAG)** pipelines, and the **Model Context Protocol (MCP)**. **OKF-go** (`github.com/abcubed3/okf`) provides native, full-featured support for **OKF Specification v0.2**, including its Trust Layer and Attested Computation, consolidating CLI subcommands (`internal/cli`) over modular Go library packages (`pkg/*`) and embedded agent skills (`skills`).
+By representing knowledge as a directory of Markdown files with structured YAML frontmatter, OKF bridges the gap between structured metadata repositories and unstructured text documentation, serving as an ideal substrate for **AI agents**, **Retrieval-Augmented Generation (RAG)** pipelines, and the **Model Context Protocol (MCP)**. **OKF-go** (`github.com/abcubed3/okf`) provides native, full-featured support for **OKF Specification v0.3** (with backward compatibility for v0.1/v0.2), including its Trust Layer, Lifecycle Governance, and Attested Computation, consolidating CLI subcommands (`internal/cli`) over modular Go library packages (`pkg/*`) and embedded agent skills (`skills`).
 
 ## Local Interface & Invariants
 
@@ -64,9 +64,9 @@ By representing knowledge as a directory of Markdown files with structured YAML 
 ## Global Invariants
 
 - **Module Visibility Boundaries**: Packages under `internal/cli` (`internal/`) and `pkg/internal/links` (`pkg/internal/`) are restricted by Go's `internal` package visibility rules so external consumers depend only on `pkg/*` and `skills`.
-- **Bundle Parsing & Reserved Files**: `pkg/parser.ParseBundleWithOptions` inspects only `.md` files (default 10 MB per-file cap), skips `log.md`, stores `index.md` files in `Bundle.IndexFiles` rather than `Bundle.Concepts`, derives forward-slash `Concept.ID` paths relative to bundle root without `.md`, and records per-file parse errors on `Concept.ParseError` so callers (`pkg/validator`, `pkg/assembly`, `pkg/export`, `pkg/generator`, `pkg/sync`) explicitly guard or report malformed concepts.
-- **Filesystem Containment**: `pkg/validator` (`bundleTargetExists`, `validateFrontmatterPath`) and `pkg/harvester.WriteConcepts` enforce lexical and symlink-resolved path containment so relative links, frontmatter resource paths, and harvested concept writes cannot escape the target bundle or output root directory.
-- **OKF v0.2 Trust & Attestation Semantics**: Actor trust tiers (`pkg/bundle.DeriveActorTrustTier`) resolve deterministically (`"human:"` prefix -> `"human-reviewed"`, other non-empty -> `"machine-confirmed"`, empty -> `"unverified"`), while `pkg/validator` enforces required `runtime` or legacy `attestation` fields on `Attested Computation` / `Attestation` concepts and elevates `WARNING` findings to CLI exit failures only under `okf lint --strict` (`internal/cli.RunLint`).
+- **Bundle Parsing & Reserved Files**: `pkg/parser.ParseBundleWithOptions` inspects `.md` files (default 10 MB per-file cap), parses `index.md` into `Bundle.IndexFiles` and `log.md` into `Bundle.LogFiles`, skips non-reserved Markdown files lacking frontmatter or a `type` field (`README.md`, `AGENTS.md`, `SKILL.md`) into `Bundle.SkippedFiles`, derives forward-slash `Concept.ID` paths relative to bundle root without `.md`, and records per-file YAML parse errors on `Concept.ParseError` so callers explicitly guard or report malformed concepts.
+- **Filesystem Containment**: `pkg/validator` (`bundleTargetExists`, `validateFrontmatterPath`), `pkg/bundle.ResolveComputation`, and `pkg/harvester.WriteConcepts` enforce lexical and symlink-resolved path containment so relative or `/`-anchored bundle links, frontmatter resource paths, external computation SQL files, and harvested concept writes cannot escape the target bundle or output root directory.
+- **OKF v0.3 Trust, Lifecycle & Attestation Semantics**: Current-only trust tiers (`pkg/bundle.Concept.TrustTier`) consider only `verified` entries with `at >= generated.at` (`"human:"` prefix -> `"human-reviewed"`, other non-empty -> `"machine-confirmed"`, empty/outdated -> `"unverified"`), while `pkg/validator` enforces reserved-file frontmatter rules, RFC 3339 timestamps, `superseded_by` lifecycle targets, footnote provenance (`[^id]`), and required `runtime` or legacy `attestation` fields on `Attested Computation` / `Attestation` concepts, elevating `WARNING` findings to CLI exit failures under `okf lint --strict` (`internal/cli.RunLint`).
 - **Thread-Safe Live Server State**: Long-running protocol daemons (`pkg/server/mcp.Server`, `pkg/server/lsp.Server`) and sync persistence (`pkg/sync.StateManager`) guard shared in-memory bundle graphs and state maps with `sync.RWMutex`, preserving the last valid bundle on `mcp` hot-reload parse errors and persisting `.okf/state.json` via atomic temp-file rename.
 
 ## Global Side Effects
@@ -79,19 +79,19 @@ By representing knowledge as a directory of Markdown files with structured YAML 
 
 - Run: `go test ./...`
 
-## 📄 Knowledge Format Specification (OKF Spec v0.2)
+## 📄 Knowledge Format Specification (OKF Spec v0.3)
 
 ![OKF Concept Document Structure](okf_concept_visual.jpg)
 
-The **Open Knowledge Format (OKF)** is an open, vendor-neutral specification developed by Google Cloud for representing structured metadata as plain Markdown files with YAML frontmatter. For the full format specification, conventions, schema details, and reference examples, see the official [Google Cloud OKF Specification](https://github.com/GoogleCloudPlatform/knowledge-catalog).
+The **Open Knowledge Format (OKF)** is an open, vendor-neutral specification originally created by Google Cloud for representing structured metadata as plain Markdown files with YAML frontmatter. For the full format specification, conventions, schema details, and reference examples, see [okf.md](https://okf.md) and the official [Open Knowledge Format Repository](https://github.com/open-knowledge-format/open-knowledge-format).
 
-The **OKF-go** provides a high-performance suite of utilities to validate bundles, harvest metadata from databases and APIs, assemble context for Large Language Models (LLMs), and run an MCP Server.
+The **OKF-go** suite validates bundles, upgrades v0.1/v0.2 repositories (`okf lint --migrate-v03`), harvests metadata from databases and APIs, assembles context for Large Language Models (LLMs), and serves an MCP Server.
 
-### 📜 OKF v0.2 Concept Examples
+### 📜 OKF v0.3 Concept Examples
 
-OKF v0.2 introduces a **trust layer** (`status`, `stale_after`, `sources`, `generated`, `verified`) and **Attested Computation** (`type: Attested Computation`).
+OKF v0.3 builds on the trust layer (`status`, `superseded_by`, `license`, `stale_after`, `sources`, `usage_window`, `generated`, `verified`, `x-*` extensions), non-concept Markdown coexistence, and **Attested Computation** (`type: Attested Computation`).
 
-#### 1. Metric Concept with OKF v0.2 Trust Signals
+#### 1. Metric Concept with OKF v0.3 Trust Signals
 
 ```markdown
 ---
@@ -99,24 +99,26 @@ type: "Metric"
 title: "Monthly Recurring Revenue (MRR)"
 description: "Total normalized monthly subscription revenue generated by active customers."
 resource: "analytics.mrr_daily"
+license: "CC-BY-4.0"
 tags:
   - "finance"
   - "revenue"
   - "kpi"
 
-# --- OKF v0.2 Trust Signals ---
+# --- OKF v0.3 Trust Signals ---
 status: "stable"
 stale_after: "2027-01-01T00:00:00Z"
 
 sources:
-  - resource: "https://stripe.com/docs/billing/subscriptions"
+  - id: "stripe-docs"
+    resource: "https://stripe.com/docs/billing/subscriptions"
     title: "Stripe Subscription Lifecycle Specs"
     author: "Billing Architecture Team"
     usage_count: 142
     last_modified: "2026-06-15T10:00:00Z"
 
 generated:
-  by: "okf-harvester/v0.2"
+  by: "okf-harvester/v0.3"
   at: "2026-08-01T12:00:00Z"
 
 verified:
@@ -126,10 +128,12 @@ verified:
 
 # Monthly Recurring Revenue (MRR)
 
-MRR measures the predictable and recurring revenue components of a subscription business.
+MRR measures the predictable and recurring revenue components of a subscription business.[^stripe-docs]
+
+[^stripe-docs]: Stripe Subscription Lifecycle Specs
 ```
 
-#### 2. OKF v0.2 Attested Computation Concept
+#### 2. OKF v0.3 Attested Computation Concept
 
 ```markdown
 ---
@@ -148,10 +152,10 @@ parameters:
     type: "integer"
     required: false
 executor:
-  resource: "references/skills/run-on-bq.md"
+  resource: "/references/skills/run-on-bq.md"
   receipt: ["job_id", "executed_sql", "result"]
 attester:
-  resource: "references/attesters/sql-equality.py"
+  resource: "/references/attesters/sql-equality.py"
 
 generated:
   by: "okf-ai-curator"
@@ -182,12 +186,12 @@ This concept defines the sanctioned, audit-verified computation logic for financ
 ```
 
 > [!NOTE]
-> OKF v0.2 Attested Computations define a `runtime`, typed `parameters`, `executor`, and `attester`, evaluated via deterministic verification recipes. The CLI also provides backward compatibility for legacy `type: Attestation` concepts.
+> OKF v0.3 Attested Computations define a `runtime`, typed `parameters`, optional `computation` file path (or `# Computation` section), `executor`, and `attester`. The CLI also maintains silent backward compatibility for draft `type: Attestation` concepts.
 
 ---
 
-- **OKF v0.2 Trust Signals & Attestation:** Native support for the v0.2 Trust Layer, including Provenance (`sources`), Trust Verification (`generated`/`verified`), Freshness Expiration (`stale_after`), Lifecycle Status (`status`), and Attested Computation (`type: Attested Computation`).
-- **Conformance Engine & Linter (`okf lint`):** Validates knowledge bundles for YAML frontmatter correctness, required attributes, broken internal links, and OKF v0.2 trust signal compliance. Supports `--strict` to fail on soft warnings in CI/CD pipelines.
+- **OKF v0.3 Governance, Trust Signals & Attestation:** Native support for Provenance (`sources`, `usage_window`, `[^id]` footnotes), Current-Only Verification (`verified.at >= generated.at`), Freshness Expiration (`stale_after`), Lifecycle Replacement (`status`, `superseded_by`), Licensing (`license`), `x-*` Extensions, and Attested Computation (`type: Attested Computation`).
+- **Conformance Engine, Linter & Migrator (`okf lint`):** Validates knowledge bundles for YAML frontmatter correctness, reserved `index.md`/`log.md` constraints, broken relative or `/`-anchored links, and OKF v0.3 trust compliance. Supports `--strict` for CI/CD gates and `--migrate-v03` (`--dry-run`) for automated bundle upgrades.
 - **Metadata Harvesters (`okf harvest`):** Automatically extracts and converts schemas from databases (PostgreSQL, MySQL, Cloud Spanner, BigQuery), OpenAPI specs, Protobuf files, Git repositories, and web pages into OKF concept documents.
 - **Context Assembler (`okf assemble`):** Performs graph-based Breadth-First Search (BFS) starting from a core concept, resolving related concepts within a specified character/token budget to build pruned, high-quality prompt context.
 - **Agent Skills Engine (`okf skill`):** Compile OKF knowledge bundles into production-grade AI Agent Skills (`SKILL.md`) for Antigravity, Claude, Cursor, and Codex, arming autonomous agents with verified schemas, attested SQL queries, and domain rules. Also provides `okf skill install` for deploying the official OKF skill into workspaces (`.agents/skills/okf`, `.claude/skills/okf`, `.cursor/skills/okf`).
@@ -349,26 +353,32 @@ okf lint /path/to/my-bundle
 
 # Enforce strict conformance (treat validation warnings as errors, ideal for CI/CD)
 okf lint /path/to/my-bundle --strict
+
+# Preview or apply automated migration from OKF v0.1/v0.2 to OKF v0.3
+okf lint /path/to/my-bundle --migrate-v03 --dry-run
+okf lint /path/to/my-bundle --migrate-v03
 ```
 
 #### Flags
 
 - `path`: Path to the knowledge bundle directory (default: `.` or current directory).
 - `--strict`: Fails with exit code 1 if any warnings are detected (such as missing recommended fields or orphaned internal links).
+- `--migrate-v03`: Upgrades v0.1/v0.2 bundle metadata, root/nested `index.md` & `log.md`, timestamps, `# Citations`, and root-anchored paths to OKF v0.3.
+- `--dry-run`: Previews `--migrate-v03` changes without modifying files on disk.
 - `--host`: Host URL for remote concept resolution via OKF Hub (default: `http://localhost:8080`).
 - `--api-key`: API key for authenticated OKF Hub requests.
 
 #### Conformance Rules
 
 - **Hard Rules (Fails with Error):**
-  - Syntactically valid YAML frontmatter and files within the 10 MB size limit (`ParseError == ""`).
-  - Presence of the `type` field in frontmatter.
-  - Required fields for Attested Computations (`runtime` on `type: Attested Computation`, or `attestation.query` and `attestation.executor` on legacy `type: Attestation`).
+  - Syntactically valid YAML frontmatter and files within the 10 MB size limit (`ParseError == ""`). Non-reserved `.md` files without frontmatter or without `type` (e.g., `README.md`, `AGENTS.md`, `SKILL.md`) are safely skipped.
+  - Reserved-file rules: nested `index.md` and all `log.md` files must not carry YAML frontmatter; root `index.md` must not carry `type`.
+  - Required fields for Attested Computations (`runtime` + inline/file computation on `type: Attested Computation`, or `attestation.query` and `attestation.executor` on legacy `type: Attestation`).
   - Remote `hub://<bundle>/<concept>` links pointing to a missing concept in a reachable Hub bundle.
 - **Soft Rules (Emits Warning; Fails with `--strict`):**
-  - Presence of recommended fields (`title`, `description`).
-  - Resolves and verifies all relative Markdown links (e.g. `[Users](users.md)`), `# Citations` URIs, and local frontmatter resource paths (`resource`, `sources[i].resource`, `computation`, `executor.resource`, `attester.resource`) to guarantee the graph is contained within the bundle root and lacks broken links.
-  - Validates lifecycle `status` (`stable` or `draft`; warns on `deprecated` or unrecognized values) and trust signals (`sources`, `generated`, `verified`, `stale_after`).
+  - Presence of recommended fields (`title`, `description`) and strict RFC 3339 timestamps with UTC offset.
+  - Resolves and verifies all relative or `/`-anchored Markdown links, `[^id]` footnote provenance references, `# Citations` URIs, and local frontmatter resource paths (`resource`, `superseded_by`, `sources[i].resource`, `computation`, `executor.resource`, `attester.resource`) to guarantee the graph is contained within the bundle root and lacks broken links.
+  - Validates lifecycle `status` (`stable`, `draft`, or `deprecated` with optional `superseded_by`) and trust signals (`sources`, `usage_window`, `generated`, current vs. outdated `verified`, `stale_after`).
 
 #### CI/CD Automations (GitHub Actions & GitLab CI)
 
@@ -676,8 +686,8 @@ okf skill install --dir /path/to/dir     # Installs to an explicit directory
 
 The installed skill is packaged directly into the `okf` binary via Go `embed` and deploys a complete agent knowledge system:
 
-- **`SKILL.md`**: Opinionated guidelines for autonomous agents on how to ground claims in evidence, respect trust verification tiers, honor sanctioned computations, and validate edits with `okf lint`.
-- **`references/spec-v02.md`**: The complete OKF Specification v0.2 reference.
+- **`SKILL.md`**: Opinionated guidelines for autonomous agents on how to ground claims in evidence, respect current-only trust verification tiers, follow `superseded_by` lifecycle links, honor sanctioned computations, and validate edits with `okf lint`.
+- **`references/spec-v03.md`** (and legacy `references/spec-v02.md`): Complete OKF Specification v0.3 & v0.2 references.
 - **`references/create-bundle.md`**: Step-by-step guide for creating, structuring, and indexing new knowledge bundles.
 - **`references/cli-cheatsheet.md`**: Cheatsheet for all `okf` CLI commands and options.
 - **`examples/`**: Working sample concepts for metrics, database schemas, and attested computations.
@@ -696,7 +706,7 @@ okf ask "How is monthly recurring revenue calculated and which table stores subs
 okf ask "What are the downstream dependencies of users?" --seed tables/users --depth 3 --bundle ./knowledge
 
 # Output raw answer text with custom model and context budget
-okf ask "What is the sanctioned query for MRR?" --bundle ./knowledge --max-chars 16000 --model gemini-3.8-flash --raw
+okf ask "What is the sanctioned query for MRR?" --bundle ./knowledge --max-chars 16000 --model gemini-3.8lash --raw
 ```
 
 ---

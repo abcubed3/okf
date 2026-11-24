@@ -3,15 +3,17 @@
 package assembly
 
 import (
-	"path"
 	"strings"
 
 	"github.com/abcubed3/okf/pkg/bundle"
 	"github.com/abcubed3/okf/pkg/internal/links"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/extension"
 	"github.com/yuin/goldmark/text"
 )
+
+var sharedMarkdown = goldmark.New(goldmark.WithExtensions(extension.GFM, extension.Footnote))
 
 // ConceptNode represents a concept in the graph, with incoming and outgoing links.
 type ConceptNode struct {
@@ -45,55 +47,40 @@ func BuildGraph(b *bundle.Bundle) *ConceptGraph {
 		}
 	}
 
-	// 2. Extract outbound links using Goldmark to avoid parsing links inside code blocks
-	markdown := goldmark.New()
+	// 2. Extract outbound links using Goldmark (with GFM tables & footnotes) to avoid parsing links inside code blocks
 	for _, node := range g.Nodes {
 		c := node.Concept
 		if c.ParseError != "" {
 			continue
 		}
 
-		reader := text.NewReader([]byte(c.Body))
-		doc := markdown.Parser().Parse(reader)
 		seen := make(map[string]bool)
+		addTarget := func(rawTarget string) {
+			if links.IsExternal(rawTarget) || links.IsSchemeURI(rawTarget) || strings.HasPrefix(rawTarget, "#") {
+				return
+			}
+			resolvedRelPath, escaped := links.ResolveBundlePath(b.Path, c.Path, rawTarget, b.OKFVersion)
+			if escaped || resolvedRelPath == "" {
+				return
+			}
+			targetConceptID := strings.TrimSuffix(resolvedRelPath, ".md")
+			if _, exists := b.GetConcept(targetConceptID); exists && !seen[targetConceptID] && targetConceptID != c.ID {
+				seen[targetConceptID] = true
+				node.OutLinks = append(node.OutLinks, targetConceptID)
+			}
+		}
+
+		if strings.TrimSpace(c.Frontmatter.SupersededBy) != "" {
+			addTarget(c.Frontmatter.SupersededBy)
+		}
+
+		reader := text.NewReader([]byte(c.Body))
+		doc := sharedMarkdown.Parser().Parse(reader)
 
 		_ = ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
 			if entering {
 				if link, ok := n.(*ast.Link); ok {
-					target := string(link.Destination)
-
-					if links.IsExternal(target) || strings.HasPrefix(target, "#") {
-						return ast.WalkContinue, nil
-					}
-
-					if idx := strings.Index(target, "#"); idx != -1 {
-						target = target[:idx]
-					}
-					if target == "" {
-						return ast.WalkContinue, nil
-					}
-
-					// Resolve logical relative or absolute path inside bundle
-					var resolvedRelPath string
-					if strings.HasPrefix(target, "/") {
-						resolvedRelPath = path.Clean(strings.TrimPrefix(target, "/"))
-					} else {
-						currentDir := path.Dir(c.Path)
-						resolvedRelPath = path.Clean(path.Join(currentDir, target))
-					}
-
-					if strings.HasPrefix(resolvedRelPath, "..") {
-						return ast.WalkContinue, nil
-					}
-
-					targetConceptID := strings.TrimSuffix(resolvedRelPath, ".md")
-
-					if _, exists := b.GetConcept(targetConceptID); exists {
-						if !seen[targetConceptID] {
-							seen[targetConceptID] = true
-							node.OutLinks = append(node.OutLinks, targetConceptID)
-						}
-					}
+					addTarget(string(link.Destination))
 				}
 			}
 			return ast.WalkContinue, nil

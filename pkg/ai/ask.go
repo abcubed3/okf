@@ -10,6 +10,7 @@ import (
 
 	"github.com/abcubed3/okf/pkg/assembly"
 	"github.com/abcubed3/okf/pkg/bundle"
+	"github.com/abcubed3/okf/pkg/internal/links"
 	"github.com/google/generative-ai-go/genai"
 	"google.golang.org/api/option"
 )
@@ -64,6 +65,9 @@ func FindSeedConcepts(b *bundle.Bundle, query string) []*bundle.Concept {
 	var matches []ConceptMatch
 
 	for _, c := range b.Concepts {
+		if c == nil || c.ParseError != "" {
+			continue
+		}
 		score := 0
 		idLower := strings.ToLower(c.ID)
 		titleLower := strings.ToLower(c.Frontmatter.Title)
@@ -100,19 +104,63 @@ func FindSeedConcepts(b *bundle.Bundle, query string) []*bundle.Concept {
 		}
 
 		if score > 0 {
+			// Deprioritize deprecated concepts in favor of current knowledge (OKF v0.3 §5.4)
+			if strings.EqualFold(string(c.Frontmatter.Status), string(bundle.ConceptLifecycleDeprecated)) {
+				score = max(score/4, 1)
+			}
 			matches = append(matches, ConceptMatch{Concept: c, Score: score})
 		}
 	}
 
 	sort.Slice(matches, func(i, j int) bool {
-		return matches[i].Score > matches[j].Score
+		if matches[i].Score != matches[j].Score {
+			return matches[i].Score > matches[j].Score
+		}
+		return matches[i].Concept.ID < matches[j].Concept.ID
 	})
 
+	seen := make(map[string]bool)
 	results := make([]*bundle.Concept, 0, len(matches))
 	for _, m := range matches {
-		results = append(results, m.Concept)
+		resolved := followSupersededBy(b, m.Concept)
+		if !seen[resolved.ID] {
+			seen[resolved.ID] = true
+			results = append(results, resolved)
+		}
 	}
 	return results
+}
+
+func followSupersededBy(b *bundle.Bundle, c *bundle.Concept) *bundle.Concept {
+	if b == nil || c == nil {
+		return c
+	}
+	visited := map[string]bool{c.ID: true}
+	curr := c
+	for range 8 {
+		if !strings.EqualFold(string(curr.Frontmatter.Status), string(bundle.ConceptLifecycleDeprecated)) {
+			break
+		}
+		sup := strings.TrimSpace(curr.Frontmatter.SupersededBy)
+		if sup == "" || links.IsSchemeURI(sup) {
+			break
+		}
+		relSlash, escaped := links.ResolveBundlePath(b.Path, curr.Path, sup, b.OKFVersion)
+		if escaped || relSlash == "" {
+			break
+		}
+		nextID := strings.TrimSuffix(relSlash, ".md")
+		if visited[nextID] {
+			break
+		}
+		nextC, exists := b.GetConcept(nextID)
+		if !exists || nextC == nil {
+			break
+		}
+		visited[nextID] = true
+		curr = nextC
+	}
+	return curr
 }
 
 // AskBundle executes a grounded question-answering workflow over an OKF bundle.
@@ -126,13 +174,23 @@ func AskBundle(ctx context.Context, b *bundle.Bundle, query string, opts AskOpti
 	}
 
 	seedID := strings.TrimSpace(opts.SeedConcept)
-	if seedID == "" {
+	if seedID != "" {
+		if explicitC, exists := b.GetConcept(seedID); exists && explicitC != nil {
+			seedID = followSupersededBy(b, explicitC).ID
+		}
+	} else {
 		candidates := FindSeedConcepts(b, query)
 		if len(candidates) == 0 {
-			// Fallback: pick the first concept if any exist
-			for id := range b.Concepts {
-				seedID = id
-				break
+			// Deterministic fallback: sort valid concept IDs and follow superseded_by
+			var validIDs []string
+			for id, c := range b.Concepts {
+				if c != nil && c.ParseError == "" {
+					validIDs = append(validIDs, id)
+				}
+			}
+			sort.Strings(validIDs)
+			if len(validIDs) > 0 {
+				seedID = followSupersededBy(b, b.Concepts[validIDs[0]]).ID
 			}
 		} else {
 			seedID = candidates[0].ID
@@ -171,8 +229,8 @@ func AskBundle(ctx context.Context, b *bundle.Bundle, query string, opts AskOpti
 	var attestations []string
 	for _, node := range res.Nodes {
 		referencedIDs = append(referencedIDs, node.ID)
-		if c, exists := b.Concepts[node.ID]; exists {
-			if q := c.SanctionedQuery(); q != "" {
+		if c, exists := b.Concepts[node.ID]; exists && c != nil {
+			if q := c.ResolvedQuery(b.Path); q != "" {
 				attestations = append(attestations, q)
 			}
 		}
@@ -189,7 +247,7 @@ func AskBundle(ctx context.Context, b *bundle.Bundle, query string, opts AskOpti
 		modelName = os.Getenv("GEMINI_MODEL")
 	}
 	if modelName == "" {
-		modelName = "gemini-3.8-flash"
+		modelName = "gemini-2.5-flash"
 	}
 
 	// If no API key is provided, return grounded offline assembly result

@@ -9,8 +9,8 @@ Package `skills` embeds the Open Knowledge Format (`okf`) agent skill assets (`S
 - `[embed.go:ReadSkill]`: `func ReadSkill(name Skill) ([]byte, error)` — validates `name` and returns the raw bytes of `<name>/SKILL.md` from the embedded filesystem.
 - `[embed.go:CopySkill]`: `func CopySkill(name Skill, destination string) error` — validates `name` and recursively copies the embedded `<name>` directory tree (including `references` and `examples`) into `destination`.
 - Embedded skill assets (`//go:embed all:okf`):
-  - [okf/SKILL.md](./okf/SKILL.md) — Open Knowledge Format (OKF v0.2) agent skill definition and workflow instructions.
-  - [okf/references/spec-v02.md](./okf/references/spec-v02.md), [okf/references/create-bundle.md](./okf/references/create-bundle.md), [okf/references/cli-cheatsheet.md](./okf/references/cli-cheatsheet.md) — Reference specification, bundle creation templates, and CLI cheatsheet.
+  - [okf/SKILL.md](./okf/SKILL.md) — Open Knowledge Format (OKF v0.3) agent skill definition and workflow instructions.
+  - [okf/references/spec-v03.md](./okf/references/spec-v03.md), [okf/references/spec-v02.md](./okf/references/spec-v02.md), [okf/references/create-bundle.md](./okf/references/create-bundle.md), [okf/references/cli-cheatsheet.md](./okf/references/cli-cheatsheet.md) — Reference specifications, bundle creation templates, and CLI cheatsheet.
   - [okf/examples/index.md](./okf/examples/index.md), [okf/examples/metrics/mrr.md](./okf/examples/metrics/mrr.md), [okf/examples/attestations/mrr_query.md](./okf/examples/attestations/mrr_query.md), [okf/examples/tables/subscriptions.md](./okf/examples/tables/subscriptions.md) — Sample OKF bundle documents.
 
 ## Invariants

@@ -31,6 +31,7 @@ type Dataset struct {
 	Name             string          `json:"name"`
 	Description      string          `json:"description,omitempty"`
 	Identifier       string          `json:"identifier,omitempty"`
+	License          string          `json:"license,omitempty"`
 	VariableMeasured []PropertyValue `json:"variableMeasured,omitempty"`
 	Keywords         []string        `json:"keywords,omitempty"`
 	DateModified     string          `json:"dateModified,omitempty"`
@@ -43,6 +44,7 @@ type WebAPI struct {
 	Name          string   `json:"name"`
 	Description   string   `json:"description,omitempty"`
 	Documentation string   `json:"documentation,omitempty"`
+	License       string   `json:"license,omitempty"`
 	Keywords      []string `json:"keywords,omitempty"`
 	DateModified  string   `json:"dateModified,omitempty"`
 }
@@ -54,6 +56,7 @@ type TechArticle struct {
 	Name         string   `json:"name"`
 	Description  string   `json:"description,omitempty"`
 	ArticleBody  string   `json:"articleBody,omitempty"`
+	License      string   `json:"license,omitempty"`
 	Keywords     []string `json:"keywords,omitempty"`
 	DateModified string   `json:"dateModified,omitempty"`
 }
@@ -77,6 +80,13 @@ func ExportBundleToJSONLD(b *bundle.Bundle) ([]byte, error) {
 		desc := c.Frontmatter.Desc
 		tags := c.Frontmatter.Tags
 		timestamp := c.Frontmatter.Timestamp
+		if timestamp == "" && c.Frontmatter.Generated != nil {
+			timestamp = c.Frontmatter.Generated.At
+		}
+		license := b.License
+		if c.Frontmatter.License != "" {
+			license = c.Frontmatter.License
+		}
 
 		// Determine the mapping based on Type
 		isTable := strings.Contains(strings.ToLower(cType), "table")
@@ -90,6 +100,7 @@ func ExportBundleToJSONLD(b *bundle.Bundle) ([]byte, error) {
 				Name:             title,
 				Description:      desc,
 				Identifier:       c.Frontmatter.Resource,
+				License:          license,
 				VariableMeasured: columns,
 				Keywords:         tags,
 				DateModified:     timestamp,
@@ -102,6 +113,7 @@ func ExportBundleToJSONLD(b *bundle.Bundle) ([]byte, error) {
 				Name:          title,
 				Description:   desc,
 				Documentation: c.Frontmatter.Resource,
+				License:       license,
 				Keywords:      tags,
 				DateModified:  timestamp,
 			}
@@ -113,6 +125,7 @@ func ExportBundleToJSONLD(b *bundle.Bundle) ([]byte, error) {
 				Name:         title,
 				Description:  desc,
 				ArticleBody:  c.Body,
+				License:      license,
 				Keywords:     tags,
 				DateModified: timestamp,
 			}

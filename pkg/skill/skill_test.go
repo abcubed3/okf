@@ -201,9 +201,11 @@ func TestInstallOfficialSkill(t *testing.T) {
 		t.Errorf("Expected installed SKILL.md to contain 'name: okf'")
 	}
 
-	refFile := filepath.Join(targetDir, "references", "spec-v02.md")
-	if _, err := os.Stat(refFile); os.IsNotExist(err) {
-		t.Errorf("Expected reference file spec-v02.md to exist")
+	for _, refName := range []string{"spec-v03.md", "spec-v02.md"} {
+		refFile := filepath.Join(targetDir, "references", refName)
+		if _, err := os.Stat(refFile); os.IsNotExist(err) {
+			t.Errorf("Expected reference file %s to exist", refName)
+		}
 	}
 
 	cheatFile := filepath.Join(targetDir, "references", "cli-cheatsheet.md")

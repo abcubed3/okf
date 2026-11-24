@@ -157,24 +157,48 @@ func (s *Server) parseAndValidate(context *glsp.Context, uri string, content str
 	if err != nil {
 		return nil
 	}
-	conceptID := strings.TrimSuffix(filepath.ToSlash(relPath), ".md")
+	relSlash := filepath.ToSlash(relPath)
+	conceptID := strings.TrimSuffix(relSlash, ".md")
+	baseName := filepath.Base(relSlash)
 
 	c, err := parser.ParseConceptReader(strings.NewReader(content), relPath, conceptID)
 	if err != nil {
-		c = &bundle.Concept{
-			ID:         conceptID,
-			Path:       relPath,
-			ParseError: err.Error(),
+		if c == nil {
+			c = &bundle.Concept{
+				ID:   conceptID,
+				Path: relPath,
+			}
 		}
+		c.ParseError = err.Error()
 	}
 
+	var issues []validator.Issue
 	s.mu.Lock()
 	if s.activeBundle == nil {
 		s.activeBundle = bundle.NewBundle(root)
 	}
-	s.activeBundle.Concepts[conceptID] = c
 	b := s.activeBundle
-	issues := validator.ValidateConcept(c, b, validator.Options{}, nil)
+	switch {
+	case baseName == "index.md":
+		b.IndexFiles[relSlash] = c
+		if relSlash == "index.md" && c.ParseError == "" {
+			b.OKFVersion = c.Frontmatter.OKFVersion
+			b.Title = c.Frontmatter.Title
+			b.Description = c.Frontmatter.Desc
+			b.License = c.Frontmatter.License
+		}
+		issues = validator.ValidateIndexFile(relSlash, c, b, validator.Options{}, nil)
+	case baseName == "log.md":
+		b.LogFiles[relSlash] = c
+		issues = validator.ValidateLogFile(relSlash, c, b, validator.Options{}, nil)
+	case c.ParseError == "" && (!c.HasFrontmatter || strings.TrimSpace(c.Frontmatter.Type) == ""):
+		// OKF v0.3 §11: non-concept Markdown files (README.md, AGENTS.md, SKILL.md) are ignored cleanly
+		delete(b.Concepts, conceptID)
+		issues = nil
+	default:
+		b.Concepts[conceptID] = c
+		issues = validator.ValidateConcept(c, b, validator.Options{}, nil)
+	}
 	s.mu.Unlock()
 
 	var diagnostics []protocol.Diagnostic

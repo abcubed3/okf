@@ -79,6 +79,9 @@ func RunPush(args []string) error {
 	}
 
 	for id, c := range b.Concepts {
+		if c == nil || c.ParseError != "" {
+			continue
+		}
 		payload.Bundle.Concepts = append(payload.Bundle.Concepts, publish.PublishConcept{
 			ID:          id,
 			Type:        c.Frontmatter.Type,

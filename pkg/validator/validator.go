@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -17,10 +18,16 @@ import (
 	"github.com/abcubed3/okf/pkg/internal/links"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/extension"
 	"github.com/yuin/goldmark/text"
 )
 
-var sharedMarkdown = goldmark.New()
+var (
+	sharedMarkdown  = goldmark.New(goldmark.WithExtensions(extension.GFM, extension.Footnote))
+	okfVersionRegex = regexp.MustCompile(`^\d+\.\d+$`)
+	isoDateRegex    = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
+	footnoteRefRe   = regexp.MustCompile(`\[\^([^\s\]]+)\]`)
+)
 
 // IssueSeverity indicates whether the finding is a hard error or a soft warning.
 type IssueSeverity string
@@ -62,25 +69,46 @@ type remoteBundleEntry struct {
 // remoteCache stores fetched concepts per bundle ID to avoid repeated network calls.
 type remoteCache map[string]remoteBundleEntry
 
-// ValidateBundle performs OKF conformance checks on a bundle, verifying frontmatter structures and links.
+// bundleRoots caches resolved lexical and symlink-evaluated bundle root paths across a validation pass.
+type bundleRoots struct {
+	hasPath  bool
+	absRoot  string
+	absErr   error
+	realRoot string
+	realErr  error
+}
+
+func resolveBundleRoots(b *bundle.Bundle) bundleRoots {
+	if b == nil || strings.TrimSpace(b.Path) == "" {
+		return bundleRoots{}
+	}
+	absRoot, absErr := filepath.Abs(b.Path)
+	if absErr != nil {
+		return bundleRoots{hasPath: true, absErr: absErr}
+	}
+	realRoot, realErr := filepath.EvalSymlinks(absRoot)
+	return bundleRoots{
+		hasPath:  true,
+		absRoot:  absRoot,
+		realRoot: realRoot,
+		realErr:  realErr,
+	}
+}
+
+// ValidateBundle performs OKF conformance checks on a bundle, verifying frontmatter structures,
+// reserved index.md / log.md rules, and internal/remote links.
 func ValidateBundle(b *bundle.Bundle, opts Options) []Issue {
 	var issues []Issue
 	rcache := make(remoteCache)
+	roots := resolveBundleRoots(b)
 	for _, c := range b.Concepts {
-		issues = append(issues, ValidateConcept(c, b, opts, rcache)...)
+		issues = append(issues, validateConceptWithRoots(c, b, opts, rcache, roots)...)
 	}
-	for _, idx := range b.IndexFiles {
-		if idx.ParseError != "" {
-			issues = append(issues, Issue{
-				ConceptID: idx.ID,
-				Path:      idx.Path,
-				Severity:  SeverityError,
-				Message:   idx.ParseError,
-			})
-			continue
-		}
-		issues = append(issues, validateLinks(idx, b, opts, rcache)...)
-		issues = append(issues, validateCitations(idx, b, opts, rcache)...)
+	for relSlash, idx := range b.IndexFiles {
+		issues = append(issues, validateIndexFileWithRoots(relSlash, idx, b, opts, rcache, roots)...)
+	}
+	for relSlash, lg := range b.LogFiles {
+		issues = append(issues, validateLogFileWithRoots(relSlash, lg, b, opts, rcache, roots)...)
 	}
 
 	sort.Slice(issues, func(i, j int) bool {
@@ -93,8 +121,167 @@ func ValidateBundle(b *bundle.Bundle, opts Options) []Issue {
 	return issues
 }
 
+// ValidateIndexFile validates a reserved index.md file against OKF Spec v0.3 §8 and §12.
+func ValidateIndexFile(relSlash string, idx *bundle.Concept, b *bundle.Bundle, opts Options, rcache remoteCache) []Issue {
+	return validateIndexFileWithRoots(relSlash, idx, b, opts, rcache, resolveBundleRoots(b))
+}
+
+func validateIndexFileWithRoots(relSlash string, idx *bundle.Concept, b *bundle.Bundle, opts Options, rcache remoteCache, roots bundleRoots) []Issue {
+	if idx == nil {
+		return nil
+	}
+	if rcache == nil {
+		rcache = make(remoteCache)
+	}
+	var issues []Issue
+	if idx.ParseError != "" {
+		return []Issue{{
+			ConceptID: idx.ID,
+			Path:      idx.Path,
+			Severity:  SeverityError,
+			Message:   idx.ParseError,
+		}}
+	}
+
+	normRel := filepath.ToSlash(relSlash)
+	if normRel == "" {
+		normRel = filepath.ToSlash(idx.Path)
+	}
+
+	if normRel == "index.md" {
+		if strings.TrimSpace(idx.Frontmatter.Type) != "" {
+			sev := SeverityError
+			if links.IsLegacyVersion(idx.Frontmatter.OKFVersion) {
+				sev = SeverityWarning
+			}
+			issues = append(issues, Issue{
+				ConceptID: idx.ID,
+				Path:      idx.Path,
+				Severity:  sev,
+				Message:   "bundle-root index.md is a reserved index file and must not declare a 'type' field",
+			})
+		}
+		if ver := strings.TrimSpace(idx.Frontmatter.OKFVersion); ver != "" && !okfVersionRegex.MatchString(ver) {
+			issues = append(issues, Issue{
+				ConceptID: idx.ID,
+				Path:      idx.Path,
+				Severity:  SeverityWarning,
+				Message:   fmt.Sprintf("invalid 'okf_version' format %q (expected '<major>.<minor>', e.g. \"0.3\")", ver),
+			})
+		}
+	} else if idx.HasFrontmatter || !idx.Frontmatter.IsZero() {
+		issues = append(issues, Issue{
+			ConceptID: idx.ID,
+			Path:      idx.Path,
+			Severity:  SeverityError,
+			Message:   "nested index.md must not contain YAML frontmatter",
+		})
+	}
+
+	issues = append(issues, validateLinksWithRoots(idx, b, opts, rcache, roots)...)
+	issues = append(issues, validateCitationsWithRoots(idx, b, opts, rcache, roots)...)
+	return issues
+}
+
+// ValidateLogFile validates a reserved log.md file against OKF Spec v0.3 §9.
+func ValidateLogFile(relSlash string, lg *bundle.Concept, b *bundle.Bundle, opts Options, rcache remoteCache) []Issue {
+	return validateLogFileWithRoots(relSlash, lg, b, opts, rcache, resolveBundleRoots(b))
+}
+
+func validateLogFileWithRoots(relSlash string, lg *bundle.Concept, b *bundle.Bundle, opts Options, rcache remoteCache, roots bundleRoots) []Issue {
+	if lg == nil {
+		return nil
+	}
+	if rcache == nil {
+		rcache = make(remoteCache)
+	}
+	var issues []Issue
+	if lg.ParseError != "" {
+		return []Issue{{
+			ConceptID: lg.ID,
+			Path:      lg.Path,
+			Severity:  SeverityError,
+			Message:   lg.ParseError,
+		}}
+	}
+
+	if lg.HasFrontmatter || !lg.Frontmatter.IsZero() {
+		issues = append(issues, Issue{
+			ConceptID: lg.ID,
+			Path:      lg.Path,
+			Severity:  SeverityError,
+			Message:   "log.md must not contain YAML frontmatter",
+		})
+	}
+
+	srcBytes := []byte(lg.Body)
+	doc := sharedMarkdown.Parser().Parse(text.NewReader(srcBytes))
+	var prevDate time.Time
+	prevHeading := ""
+	hasPrevDate := false
+
+	_ = ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		h, ok := n.(*ast.Heading)
+		if !ok || h.Level != 2 {
+			return ast.WalkContinue, nil
+		}
+		heading := strings.TrimSpace(extractPlainHeadingText(h, srcBytes))
+		if !isoDateRegex.MatchString(heading) {
+			issues = append(issues, Issue{
+				ConceptID: lg.ID,
+				Path:      lg.Path,
+				Severity:  SeverityWarning,
+				Message:   fmt.Sprintf("log.md date heading '## %s' should use ISO 8601 YYYY-MM-DD format", heading),
+			})
+			return ast.WalkSkipChildren, nil
+		}
+		parsedDate, err := time.Parse("2006-01-02", heading)
+		if err != nil {
+			issues = append(issues, Issue{
+				ConceptID: lg.ID,
+				Path:      lg.Path,
+				Severity:  SeverityWarning,
+				Message:   fmt.Sprintf("log.md date heading '## %s' is not a valid calendar date", heading),
+			})
+			return ast.WalkSkipChildren, nil
+		}
+		if hasPrevDate && parsedDate.After(prevDate) {
+			issues = append(issues, Issue{
+				ConceptID: lg.ID,
+				Path:      lg.Path,
+				Severity:  SeverityWarning,
+				Message:   fmt.Sprintf("log.md date heading '## %s' should be in reverse chronological order (appears after '## %s')", heading, prevHeading),
+			})
+		}
+		prevDate = parsedDate
+		prevHeading = heading
+		hasPrevDate = true
+		return ast.WalkSkipChildren, nil
+	})
+
+	issues = append(issues, validateLinksWithRoots(lg, b, opts, rcache, roots)...)
+	issues = append(issues, validateCitationsWithRoots(lg, b, opts, rcache, roots)...)
+	return issues
+}
+
+func extractPlainHeadingText(h *ast.Heading, src []byte) string {
+	var buf strings.Builder
+	for i := 0; i < h.Lines().Len(); i++ {
+		seg := h.Lines().At(i)
+		buf.Write(seg.Value(src))
+	}
+	return buf.String()
+}
+
 // ValidateConcept performs OKF conformance checks on a single concept against the bundle.
 func ValidateConcept(c *bundle.Concept, b *bundle.Bundle, opts Options, rcache remoteCache) []Issue {
+	return validateConceptWithRoots(c, b, opts, rcache, resolveBundleRoots(b))
+}
+
+func validateConceptWithRoots(c *bundle.Concept, b *bundle.Bundle, opts Options, rcache remoteCache, roots bundleRoots) []Issue {
 	var issues []Issue
 	if rcache == nil {
 		rcache = make(remoteCache)
@@ -138,39 +325,69 @@ func ValidateConcept(c *bundle.Concept, b *bundle.Bundle, opts Options, rcache r
 		})
 	}
 
-	issues = append(issues, validateFrontmatterPaths(c, b)...)
+	issues = append(issues, validateFrontmatterPathsWithRoots(c, b, roots)...)
 
 	// 3. Link validation
-	linkIssues := validateLinks(c, b, opts, rcache)
+	linkIssues := validateLinksWithRoots(c, b, opts, rcache, roots)
 	issues = append(issues, linkIssues...)
 
 	// 4. Citation validation
-	citationIssues := validateCitations(c, b, opts, rcache)
+	citationIssues := validateCitationsWithRoots(c, b, opts, rcache, roots)
 	issues = append(issues, citationIssues...)
 
-	// 5. OKF v0.2 Trust Signals & Attestation validation
-	trustIssues := validateTrustSignals(c)
+	// 5. OKF v0.2 / v0.3 Trust Signals, Provenance, Lifecycle & Attestation validation
+	trustIssues := validateTrustSignals(c, b)
 	issues = append(issues, trustIssues...)
 
 	return issues
 }
 
-// validateTrustSignals verifies OKF v0.2 provenance, trust tiers, freshness, lifecycle, and attestation metadata.
-func validateTrustSignals(c *bundle.Concept) []Issue {
+func validateTimestampFormat(c *bundle.Concept, fieldName, rawVal string) (time.Time, bool, []Issue) {
+	trimmed := strings.TrimSpace(rawVal)
+	if trimmed == "" {
+		return time.Time{}, false, nil
+	}
+	if bundle.IsStrictRFC3339(trimmed) {
+		t, _ := bundle.ParseOKFTimestamp(trimmed)
+		return t, true, nil
+	}
+	if t, ok := bundle.ParseOKFTimestamp(trimmed); ok {
+		return t, true, []Issue{{
+			ConceptID: c.ID,
+			Path:      c.Path,
+			Severity:  SeverityWarning,
+			Message:   fmt.Sprintf("field '%s' value '%s' is missing time and UTC offset (expected RFC3339 datetime, e.g. 2026-06-30T14:00:00Z)", fieldName, trimmed),
+		}}
+	}
+	return time.Time{}, false, []Issue{{
+		ConceptID: c.ID,
+		Path:      c.Path,
+		Severity:  SeverityWarning,
+		Message:   fmt.Sprintf("invalid '%s' date format '%s' (expected RFC3339 datetime with UTC offset)", fieldName, trimmed),
+	}}
+}
+
+// validateTrustSignals verifies OKF v0.2/v0.3 provenance, trust tiers, freshness, lifecycle, and attestation metadata.
+func validateTrustSignals(c *bundle.Concept, b *bundle.Bundle) []Issue {
 	var issues []Issue
 
-	// 1. Lifecycle status check
+	// 1. Lifecycle status & superseded_by check (§5.4)
+	supersededBy := strings.TrimSpace(c.Frontmatter.SupersededBy)
+	st := bundle.ConceptLifecycleStatus(strings.ToLower(strings.TrimSpace(string(c.Frontmatter.Status))))
 	if c.Frontmatter.Status != "" {
-		st := bundle.ConceptLifecycleStatus(strings.ToLower(strings.TrimSpace(string(c.Frontmatter.Status))))
 		switch st {
 		case bundle.ConceptLifecycleDraft, bundle.ConceptLifecycleStable:
 			// Valid standard statuses
 		case bundle.ConceptLifecycleDeprecated:
+			msg := "concept is marked as deprecated"
+			if supersededBy != "" {
+				msg = fmt.Sprintf("concept is marked as deprecated (superseded by '%s')", supersededBy)
+			}
 			issues = append(issues, Issue{
 				ConceptID: c.ID,
 				Path:      c.Path,
 				Severity:  SeverityWarning,
-				Message:   "concept is marked as deprecated",
+				Message:   msg,
 			})
 		default:
 			issues = append(issues, Issue{
@@ -181,32 +398,133 @@ func validateTrustSignals(c *bundle.Concept) []Issue {
 			})
 		}
 	}
-
-	// 2. Freshness (stale_after) check
-	if c.Frontmatter.StaleAfter != "" {
-		staleStr := strings.TrimSpace(c.Frontmatter.StaleAfter)
-		staleTime, err := time.Parse(time.RFC3339, staleStr)
-		if err != nil {
-			staleTime, err = time.Parse("2006-01-02", staleStr)
-		}
-		if err != nil {
+	if supersededBy != "" {
+		if st != bundle.ConceptLifecycleDeprecated {
 			issues = append(issues, Issue{
 				ConceptID: c.ID,
 				Path:      c.Path,
 				Severity:  SeverityWarning,
-				Message:   fmt.Sprintf("invalid 'stale_after' date format '%s' (expected RFC3339 or YYYY-MM-DD)", staleStr),
+				Message:   "'superseded_by' is set on a non-deprecated concept (expected status: 'deprecated')",
 			})
-		} else if time.Now().After(staleTime) {
+		}
+		if !links.IsSchemeURI(supersededBy) {
+			bundleRoot := ""
+			okfVer := ""
+			maxHops := 8
+			if b != nil {
+				bundleRoot = b.Path
+				okfVer = b.OKFVersion
+				if len(b.Concepts)+1 > maxHops {
+					maxHops = len(b.Concepts) + 1
+				}
+			}
+			if resolved, escaped := links.ResolveBundlePath(bundleRoot, c.Path, supersededBy, okfVer); !escaped {
+				targetID := strings.TrimSuffix(resolved, ".md")
+				if targetID == c.ID || resolved == filepath.ToSlash(c.Path) {
+					issues = append(issues, Issue{
+						ConceptID: c.ID,
+						Path:      c.Path,
+						Severity:  SeverityWarning,
+						Message:   "'superseded_by' cannot reference the concept itself",
+					})
+				} else if b != nil {
+					visited := map[string]bool{c.ID: true}
+					nextID := targetID
+					for range maxHops {
+						if visited[nextID] {
+							issues = append(issues, Issue{
+								ConceptID: c.ID,
+								Path:      c.Path,
+								Severity:  SeverityWarning,
+								Message:   fmt.Sprintf("'superseded_by' chain forms a cycle involving '%s'", nextID),
+							})
+							break
+						}
+						visited[nextID] = true
+						nextC, exists := b.GetConcept(nextID)
+						if !exists || nextC == nil {
+							break
+						}
+						nextSup := strings.TrimSpace(nextC.Frontmatter.SupersededBy)
+						if nextSup == "" || links.IsSchemeURI(nextSup) {
+							break
+						}
+						nextResolved, nextEsc := links.ResolveBundlePath(bundleRoot, nextC.Path, nextSup, okfVer)
+						if nextEsc || nextResolved == "" {
+							break
+						}
+						nextID = strings.TrimSuffix(nextResolved, ".md")
+					}
+				}
+			}
+		}
+	}
+
+	// 2. Freshness (stale_after) check (§5.5)
+	if c.Frontmatter.StaleAfter != "" {
+		staleTime, ok, tsIssues := validateTimestampFormat(c, "stale_after", c.Frontmatter.StaleAfter)
+		issues = append(issues, tsIssues...)
+		if ok && !time.Now().Before(staleTime) {
 			issues = append(issues, Issue{
 				ConceptID: c.ID,
 				Path:      c.Path,
 				Severity:  SeverityWarning,
-				Message:   fmt.Sprintf("concept is stale (stale_after date '%s' has passed)", staleStr),
+				Message:   fmt.Sprintf("concept is stale (stale_after date '%s' has passed)", strings.TrimSpace(c.Frontmatter.StaleAfter)),
 			})
 		}
 	}
 
-	// 3. Generated timestamp and actor check
+	// 3. Provenance sources & usage_window check (§5.1)
+	sourceIDs := make(map[string]bool)
+	for i, src := range c.Frontmatter.Sources {
+		if strings.TrimSpace(src.Resource) == "" {
+			issues = append(issues, Issue{
+				ConceptID: c.ID,
+				Path:      c.Path,
+				Severity:  SeverityError,
+				Message:   fmt.Sprintf("sources[%d] is missing required 'resource' field", i),
+			})
+		}
+		if id := strings.TrimSpace(src.ID); id != "" {
+			if sourceIDs[id] {
+				issues = append(issues, Issue{
+					ConceptID: c.ID,
+					Path:      c.Path,
+					Severity:  SeverityWarning,
+					Message:   fmt.Sprintf("duplicate 'sources[].id' value %q", id),
+				})
+			}
+			sourceIDs[id] = true
+		}
+		if src.LastModified != "" {
+			_, _, tsIssues := validateTimestampFormat(c, fmt.Sprintf("sources[%d].last_modified", i), src.LastModified)
+			issues = append(issues, tsIssues...)
+		}
+		if src.UsageWindow != nil {
+			_, _, fromIssues := validateTimestampFormat(c, fmt.Sprintf("sources[%d].usage_window.from", i), src.UsageWindow.From)
+			_, _, toIssues := validateTimestampFormat(c, fmt.Sprintf("sources[%d].usage_window.to", i), src.UsageWindow.To)
+			issues = append(issues, fromIssues...)
+			issues = append(issues, toIssues...)
+		}
+	}
+	if c.Frontmatter.UsageWindow != nil {
+		_, _, fromIssues := validateTimestampFormat(c, "usage_window.from", c.Frontmatter.UsageWindow.From)
+		_, _, toIssues := validateTimestampFormat(c, "usage_window.to", c.Frontmatter.UsageWindow.To)
+		issues = append(issues, fromIssues...)
+		issues = append(issues, toIssues...)
+	}
+	for _, label := range extractFootnoteLabels(c.Body) {
+		if !sourceIDs[label] {
+			issues = append(issues, Issue{
+				ConceptID: c.ID,
+				Path:      c.Path,
+				Severity:  SeverityWarning,
+				Message:   fmt.Sprintf("footnote '[^%s]' does not match any 'sources[].id' entry", label),
+			})
+		}
+	}
+
+	// 4. Generated timestamp and actor check (§5.2)
 	if c.Frontmatter.Generated != nil {
 		if strings.TrimSpace(c.Frontmatter.Generated.By) == "" {
 			issues = append(issues, Issue{
@@ -216,22 +534,20 @@ func validateTrustSignals(c *bundle.Concept) []Issue {
 				Message:   "generated frontmatter block is missing 'by' actor identifier",
 			})
 		}
-		if c.Frontmatter.Generated.At != "" {
-			genAt := strings.TrimSpace(c.Frontmatter.Generated.At)
-			if _, err := time.Parse(time.RFC3339, genAt); err != nil {
-				if _, err := time.Parse("2006-01-02", genAt); err != nil {
-					issues = append(issues, Issue{
-						ConceptID: c.ID,
-						Path:      c.Path,
-						Severity:  SeverityWarning,
-						Message:   fmt.Sprintf("invalid 'generated.at' date format '%s'", genAt),
-					})
-				}
-			}
+		if strings.TrimSpace(c.Frontmatter.Generated.At) == "" {
+			issues = append(issues, Issue{
+				ConceptID: c.ID,
+				Path:      c.Path,
+				Severity:  SeverityWarning,
+				Message:   "generated frontmatter block is missing 'at' timestamp",
+			})
+		} else {
+			_, _, tsIssues := validateTimestampFormat(c, "generated.at", c.Frontmatter.Generated.At)
+			issues = append(issues, tsIssues...)
 		}
 	}
 
-	// 4. Verified records check
+	// 5. Verified records & current-only trust tier check (§5.2, §5.3)
 	for i, v := range c.Frontmatter.Verified {
 		if strings.TrimSpace(v.By) == "" {
 			issues = append(issues, Issue{
@@ -241,26 +557,33 @@ func validateTrustSignals(c *bundle.Concept) []Issue {
 				Message:   fmt.Sprintf("verified[%d] record is missing 'by' actor identifier", i),
 			})
 		}
-		if v.At != "" {
-			verAt := strings.TrimSpace(v.At)
-			if _, err := time.Parse(time.RFC3339, verAt); err != nil {
-				if _, err := time.Parse("2006-01-02", verAt); err != nil {
-					issues = append(issues, Issue{
-						ConceptID: c.ID,
-						Path:      c.Path,
-						Severity:  SeverityWarning,
-						Message:   fmt.Sprintf("invalid 'verified[%d].at' date format '%s'", i, verAt),
-					})
-				}
-			}
+		if strings.TrimSpace(v.At) == "" {
+			issues = append(issues, Issue{
+				ConceptID: c.ID,
+				Path:      c.Path,
+				Severity:  SeverityWarning,
+				Message:   fmt.Sprintf("verified[%d] record is missing 'at' timestamp", i),
+			})
+		} else {
+			_, _, tsIssues := validateTimestampFormat(c, fmt.Sprintf("verified[%d].at", i), v.At)
+			issues = append(issues, tsIssues...)
 		}
 	}
+	if c.HasOutdatedVerifications() && c.Frontmatter.Generated != nil {
+		issues = append(issues, Issue{
+			ConceptID: c.ID,
+			Path:      c.Path,
+			Severity:  SeverityWarning,
+			Message:   fmt.Sprintf("concept has verification record(s) older than 'generated.at' (%s); active trust tier is '%s' until re-verified", strings.TrimSpace(c.Frontmatter.Generated.At), c.TrustTier()),
+		})
+	}
 
-	// 5. Attestation concept type check
+	// 6. Attestation / Attested Computation contract check (§10)
 	cType := strings.ToLower(strings.TrimSpace(c.Frontmatter.Type))
 	hasLegacyAttestation := c.Frontmatter.Attestation != nil &&
 		(strings.TrimSpace(c.Frontmatter.Attestation.Query) != "" || strings.TrimSpace(c.Frontmatter.Attestation.Executor) != "")
 	if cType == "attestation" {
+		// Silent backward compatibility for draft type: Attestation when populated
 		if !hasLegacyAttestation {
 			issues = append(issues, Issue{
 				ConceptID: c.ID,
@@ -269,20 +592,163 @@ func validateTrustSignals(c *bundle.Concept) []Issue {
 				Message:   "attestation concept requires an 'attestation' frontmatter block with 'query' or 'executor'",
 			})
 		}
-	} else if cType == "attested computation" && strings.TrimSpace(c.Frontmatter.Runtime) == "" && !hasLegacyAttestation {
-		issues = append(issues, Issue{
-			ConceptID: c.ID,
-			Path:      c.Path,
-			Severity:  SeverityError,
-			Message:   "attested computation concept requires a 'runtime' frontmatter field",
-		})
+	} else if cType == "attested computation" {
+		for i, p := range c.Frontmatter.Parameters {
+			if strings.TrimSpace(p.Name) == "" {
+				issues = append(issues, Issue{
+					ConceptID: c.ID,
+					Path:      c.Path,
+					Severity:  SeverityError,
+					Message:   fmt.Sprintf("parameters[%d] is missing required 'name' field", i),
+				})
+			}
+			if strings.TrimSpace(p.Type) == "" {
+				issues = append(issues, Issue{
+					ConceptID: c.ID,
+					Path:      c.Path,
+					Severity:  SeverityError,
+					Message:   fmt.Sprintf("parameters[%d] is missing required 'type' field", i),
+				})
+			}
+		}
+
+		if strings.TrimSpace(c.Frontmatter.Runtime) == "" && !hasLegacyAttestation {
+			issues = append(issues, Issue{
+				ConceptID: c.ID,
+				Path:      c.Path,
+				Severity:  SeverityError,
+				Message:   "attested computation concept requires a 'runtime' frontmatter field",
+			})
+		} else if !hasLegacyAttestation {
+			hasInline := c.InlineComputation() != ""
+			hasFile := strings.TrimSpace(c.Frontmatter.Computation) != ""
+			if !hasInline && !hasFile {
+				issues = append(issues, Issue{
+					ConceptID: c.ID,
+					Path:      c.Path,
+					Severity:  SeverityWarning,
+					Message:   "attested computation has neither an inline '# Computation' code block nor a 'computation' file path",
+				})
+			} else if hasInline && hasFile {
+				issues = append(issues, Issue{
+					ConceptID: c.ID,
+					Path:      c.Path,
+					Severity:  SeverityWarning,
+					Message:   "attested computation specifies both an inline '# Computation' code block and a 'computation' file path; prefer one",
+				})
+			}
+		}
 	}
 
 	return issues
 }
 
-// validateLinks scans the concept body for broken internal markdown links using a robust Markdown AST parser.
-func validateLinks(c *bundle.Concept, b *bundle.Bundle, opts Options, rcache remoteCache) []Issue {
+func extractFootnoteLabels(body string) []string {
+	if body == "" {
+		return nil
+	}
+	seen := make(map[string]bool)
+	var labels []string
+
+	fenceChar := byte(0)
+	fenceLen := 0
+	for _, line := range strings.Split(body, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if fc, fl := parseCodeFence(trimmed); fc != 0 {
+			if fenceChar == 0 {
+				fenceChar = fc
+				fenceLen = fl
+				continue
+			}
+			if fc == fenceChar && fl >= fenceLen {
+				fenceChar = 0
+				fenceLen = 0
+				continue
+			}
+		}
+		if fenceChar != 0 || strings.HasPrefix(line, "    ") || strings.HasPrefix(line, "\t") {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "[^") && strings.Contains(trimmed, "]:") {
+			continue
+		}
+		// Strip CommonMark inline backtick code spans before scanning [^label] references
+		cleanLine := stripInlineCodeSpans(line)
+		for _, m := range footnoteRefRe.FindAllStringSubmatch(cleanLine, -1) {
+			if len(m) == 2 && !seen[m[1]] {
+				seen[m[1]] = true
+				labels = append(labels, m[1])
+			}
+		}
+	}
+	return labels
+}
+
+func parseCodeFence(trimmed string) (byte, int) {
+	if len(trimmed) < 3 {
+		return 0, 0
+	}
+	ch := trimmed[0]
+	if ch != '`' && ch != '~' {
+		return 0, 0
+	}
+	n := 0
+	for n < len(trimmed) && trimmed[n] == ch {
+		n++
+	}
+	if n < 3 {
+		return 0, 0
+	}
+	return ch, n
+}
+
+func stripInlineCodeSpans(line string) string {
+	if !strings.Contains(line, "`") {
+		return line
+	}
+	var out strings.Builder
+	i := 0
+	plainStart := 0
+	for i < len(line) {
+		if line[i] != '`' {
+			i++
+			continue
+		}
+		tickStart := i
+		for i < len(line) && line[i] == '`' {
+			i++
+		}
+		tickLen := i - tickStart
+		closeIdx := -1
+		j := i
+		for j < len(line) {
+			if line[j] != '`' {
+				j++
+				continue
+			}
+			cStart := j
+			for j < len(line) && line[j] == '`' {
+				j++
+			}
+			if j-cStart == tickLen {
+				closeIdx = cStart
+				break
+			}
+		}
+		if closeIdx == -1 {
+			continue
+		}
+		out.WriteString(line[plainStart:tickStart])
+		out.WriteByte(' ')
+		i = closeIdx + tickLen
+		plainStart = i
+	}
+	out.WriteString(line[plainStart:])
+	return out.String()
+}
+
+// validateLinksWithRoots scans the concept body for broken internal markdown links using a robust Markdown AST parser.
+func validateLinksWithRoots(c *bundle.Concept, b *bundle.Bundle, opts Options, rcache remoteCache, roots bundleRoots) []Issue {
 	var issues []Issue
 
 	// Extract links from AST, ignoring code blocks
@@ -315,18 +781,17 @@ func validateLinks(c *bundle.Concept, b *bundle.Bundle, opts Options, rcache rem
 			continue
 		}
 
-		// Resolve logical relative or absolute path inside bundle
-		targetNorm := strings.ReplaceAll(target, "\\", "/")
-		var resolvedRelPath string
-		if strings.HasPrefix(targetNorm, "/") {
-			resolvedRelPath = path.Clean(strings.TrimPrefix(targetNorm, "/"))
-		} else {
-			currentDir := path.Dir(filepath.ToSlash(c.Path))
-			resolvedRelPath = path.Clean(path.Join(currentDir, targetNorm))
+		// Resolve logical relative or absolute path inside bundle (with legacy v0.1/v0.2 fallback)
+		bundleRoot := ""
+		okfVer := ""
+		if b != nil {
+			bundleRoot = b.Path
+			okfVer = b.OKFVersion
 		}
+		resolvedRelPath, escaped := links.ResolveBundlePath(bundleRoot, c.Path, target, okfVer)
 
 		// Normalize: check if resolved path goes beyond the root
-		if resolvedRelPath == ".." || strings.HasPrefix(resolvedRelPath, "../") {
+		if escaped {
 			issues = append(issues, Issue{
 				ConceptID: c.ID,
 				Path:      c.Path,
@@ -340,7 +805,7 @@ func validateLinks(c *bundle.Concept, b *bundle.Bundle, opts Options, rcache rem
 		targetConceptID := strings.TrimSuffix(resolvedRelPath, ".md")
 
 		// Check if the concept or reserved/bundle file exists in the bundle
-		if !bundleTargetExists(b, resolvedRelPath) {
+		if !bundleTargetExistsWithRoots(b, resolvedRelPath, roots) {
 			issues = append(issues, Issue{
 				ConceptID: c.ID,
 				Path:      c.Path,
@@ -480,8 +945,8 @@ func fetchRemoteBundle(opts Options, bundleID string) remoteBundleEntry {
 	return remoteBundleEntry{concepts: conceptSet}
 }
 
-// validateCitations verifies that any local/internal or hub:// citation links resolve to existing concepts.
-func validateCitations(c *bundle.Concept, b *bundle.Bundle, opts Options, rcache remoteCache) []Issue {
+// validateCitationsWithRoots verifies that any local/internal or hub:// citation links resolve to existing concepts.
+func validateCitationsWithRoots(c *bundle.Concept, b *bundle.Bundle, opts Options, rcache remoteCache, roots bundleRoots) []Issue {
 	var issues []Issue
 
 	for _, cite := range c.Citations {
@@ -511,18 +976,17 @@ func validateCitations(c *bundle.Concept, b *bundle.Bundle, opts Options, rcache
 			continue
 		}
 
-		// Resolve path
-		targetNorm := strings.ReplaceAll(target, "\\", "/")
-		var resolvedRelPath string
-		if strings.HasPrefix(targetNorm, "/") {
-			resolvedRelPath = path.Clean(strings.TrimPrefix(targetNorm, "/"))
-		} else {
-			currentDir := path.Dir(filepath.ToSlash(c.Path))
-			resolvedRelPath = path.Clean(path.Join(currentDir, targetNorm))
+		// Resolve path (with legacy v0.1/v0.2 fallback)
+		bundleRoot := ""
+		okfVer := ""
+		if b != nil {
+			bundleRoot = b.Path
+			okfVer = b.OKFVersion
 		}
+		resolvedRelPath, escaped := links.ResolveBundlePath(bundleRoot, c.Path, target, okfVer)
 
 		// Check if resolved path goes beyond root
-		if resolvedRelPath == ".." || strings.HasPrefix(resolvedRelPath, "../") {
+		if escaped {
 			issues = append(issues, Issue{
 				ConceptID: c.ID,
 				Path:      c.Path,
@@ -536,7 +1000,7 @@ func validateCitations(c *bundle.Concept, b *bundle.Bundle, opts Options, rcache
 		targetConceptID := strings.TrimSuffix(resolvedRelPath, ".md")
 
 		// Check existence
-		if !bundleTargetExists(b, resolvedRelPath) {
+		if !bundleTargetExistsWithRoots(b, resolvedRelPath, roots) {
 			issues = append(issues, Issue{
 				ConceptID: c.ID,
 				Path:      c.Path,
@@ -549,10 +1013,10 @@ func validateCitations(c *bundle.Concept, b *bundle.Bundle, opts Options, rcache
 	return issues
 }
 
-// bundleTargetExists checks whether a bundle-relative path resolves to a parsed concept,
+// bundleTargetExistsWithRoots checks whether a bundle-relative path resolves to a parsed concept,
 // a recorded index.md file, an existing file inside the bundle (such as index.md, log.md,
 // or a reference file), or a directory containing an index.md file, without escaping the bundle root.
-func bundleTargetExists(b *bundle.Bundle, resolvedRelPath string) bool {
+func bundleTargetExistsWithRoots(b *bundle.Bundle, resolvedRelPath string, roots bundleRoots) bool {
 	if b == nil {
 		return false
 	}
@@ -577,14 +1041,17 @@ func bundleTargetExists(b *bundle.Bundle, resolvedRelPath string) bool {
 		}
 	}
 
-	if strings.TrimSpace(b.Path) == "" {
+	if b.LogFiles != nil {
+		if _, exists := b.LogFiles[resolvedRelPath]; exists {
+			return true
+		}
+	}
+
+	if !roots.hasPath || roots.absErr != nil || roots.realErr != nil {
 		return false
 	}
 
-	bundleRoot, err := filepath.Abs(b.Path)
-	if err != nil {
-		return false
-	}
+	bundleRoot := roots.absRoot
 	targetPath := filepath.Join(bundleRoot, filepath.FromSlash(resolvedRelPath))
 	rel, err := filepath.Rel(bundleRoot, targetPath)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
@@ -603,14 +1070,10 @@ func bundleTargetExists(b *bundle.Bundle, resolvedRelPath string) bool {
 		}
 	}
 
-	realRoot, err := filepath.EvalSymlinks(bundleRoot)
-	if err != nil {
-		return false
-	}
 	realTarget, err := filepath.EvalSymlinks(targetPath)
 	if err != nil {
 		return false
 	}
-	realRel, err := filepath.Rel(realRoot, realTarget)
+	realRel, err := filepath.Rel(roots.realRoot, realTarget)
 	return err == nil && realRel != ".." && !strings.HasPrefix(realRel, ".."+string(os.PathSeparator))
 }

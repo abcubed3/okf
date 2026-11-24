@@ -2,7 +2,6 @@ package cli
 
 import (
 	"os"
-	"strings"
 	"testing"
 	"time"
 )
@@ -50,29 +49,6 @@ func TestRunServer_RemoteFlag(t *testing.T) {
 	if err := <-done; err != nil {
 		t.Fatalf("expected clean exit on stdin EOF, got: %v", err)
 	}
-}
-
-func captureStderr(f func()) string {
-	old := os.Stderr
-	r, w, _ := os.Pipe()
-	os.Stderr = w
-
-	f()
-
-	w.Close()
-	os.Stderr = old
-	var buf strings.Builder
-	b := make([]byte, 1024)
-	for {
-		n, err := r.Read(b)
-		if n > 0 {
-			buf.Write(b[:n])
-		}
-		if err != nil {
-			break
-		}
-	}
-	return buf.String()
 }
 
 func TestRunServer_RemoteValidation(t *testing.T) {

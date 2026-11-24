@@ -66,9 +66,11 @@ func TestCopySkill_Success(t *testing.T) {
 	}
 
 	// Verify references
-	refPath := filepath.Join(tmpDir, "references", "spec-v02.md")
-	if _, err := os.Stat(refPath); err != nil {
-		t.Errorf("Expected references/spec-v02.md to exist: %v", err)
+	for _, refName := range []string{"spec-v03.md", "spec-v02.md"} {
+		refPath := filepath.Join(tmpDir, "references", refName)
+		if _, err := os.Stat(refPath); err != nil {
+			t.Errorf("Expected references/%s to exist: %v", refName, err)
+		}
 	}
 
 	// Verify examples

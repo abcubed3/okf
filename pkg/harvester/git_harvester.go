@@ -110,7 +110,7 @@ func (gh *GitHarvester) Harvest(ctx context.Context) ([]*bundle.Concept, error) 
 	}
 
 	var concepts []*bundle.Concept
-	nowStr := time.Now().Format(time.RFC3339)
+	nowStr := time.Now().UTC().Format(time.RFC3339)
 
 	// 2. Generate Git Repository Concept
 	repoExtra := map[string]interface{}{
@@ -140,11 +140,14 @@ func (gh *GitHarvester) Harvest(ctx context.Context) ([]*bundle.Concept, error) 
 		ID:   "git/repository",
 		Path: "git/repository.md",
 		Frontmatter: bundle.Frontmatter{
-			Type:      "Git Repository",
-			Title:     "Git Repository",
-			Desc:      "Summary statistics of the git repository status and history.",
-			Timestamp: nowStr,
-			Extra:     repoExtra,
+			Type:  "Git Repository",
+			Title: "Git Repository",
+			Desc:  "Summary statistics of the git repository status and history.",
+			Generated: &bundle.ActorInfo{
+				By: "okf-harvester/v0.3",
+				At: nowStr,
+			},
+			Extra: repoExtra,
 		},
 		Body: repoBodyBuilder.String(),
 	})
@@ -235,11 +238,14 @@ func (gh *GitHarvester) Harvest(ctx context.Context) ([]*bundle.Concept, error) 
 			ID:   fmt.Sprintf("git/commits/%s", shortHash),
 			Path: fmt.Sprintf("git/commits/%s.md", shortHash),
 			Frontmatter: bundle.Frontmatter{
-				Type:      "Git Commit",
-				Title:     fmt.Sprintf("Commit: %s", shortHash),
-				Desc:      fmt.Sprintf("Git commit hash %s by %s.", shortHash, c.Author.Name),
-				Timestamp: c.Author.When.Format(time.RFC3339),
-				Extra:     commitExtra,
+				Type:  "Git Commit",
+				Title: fmt.Sprintf("Commit: %s", shortHash),
+				Desc:  fmt.Sprintf("Git commit hash %s by %s.", shortHash, c.Author.Name),
+				Generated: &bundle.ActorInfo{
+					By: "okf-harvester/v0.3",
+					At: c.Author.When.UTC().Format(time.RFC3339),
+				},
+				Extra: commitExtra,
 			},
 			Body: commitBodyBuilder.String(),
 		})
@@ -267,11 +273,14 @@ func (gh *GitHarvester) Harvest(ctx context.Context) ([]*bundle.Concept, error) 
 			ID:   fmt.Sprintf("git/contributors/%s", slug),
 			Path: fmt.Sprintf("git/contributors/%s.md", slug),
 			Frontmatter: bundle.Frontmatter{
-				Type:      "Git Contributor",
-				Title:     fmt.Sprintf("Contributor: %s", stats.Name),
-				Desc:      fmt.Sprintf("Contributor metrics for %s in this project.", stats.Name),
-				Timestamp: nowStr,
-				Extra:     contribExtra,
+				Type:  "Git Contributor",
+				Title: fmt.Sprintf("Contributor: %s", stats.Name),
+				Desc:  fmt.Sprintf("Contributor metrics for %s in this project.", stats.Name),
+				Generated: &bundle.ActorInfo{
+					By: "okf-harvester/v0.3",
+					At: nowStr,
+				},
+				Extra: contribExtra,
 			},
 			Body: contribBodyBuilder.String(),
 		})

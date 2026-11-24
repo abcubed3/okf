@@ -425,3 +425,60 @@ func BenchmarkParseBundle(b *testing.B) {
 		}
 	}
 }
+
+func TestParseBundle_V03CoexistenceAndRootMetadata(t *testing.T) {
+	dir := t.TempDir()
+	writeMockConcept(t, dir, "index.md", "---\nokf_version: \"0.3\"\ntitle: \"Acme Bundle\"\ndescription: \"Curated knowledge.\"\nlicense: \"Apache-2.0\"\n---\n# Acme Bundle\n")
+	writeMockConcept(t, dir, "log.md", "# Update Log\n\n## 2026-11-18\n\n- **Creation**: Initialized.\n")
+	writeMockConcept(t, dir, "README.md", "# Repository README\n\nStandard GitHub README without frontmatter.\n")
+	writeMockConcept(t, dir, "AGENTS.md", "# Agent Instructions\n\nFollow repo conventions.\n")
+	writeMockConcept(t, dir, ".agents_public/SKILL.md", "---\nname: helper-skill\ndescription: A coding skill without an OKF type.\n---\n# Skill\n")
+	writeMockConcept(t, dir, "SKILL.md", "---\nname: okf-consume\ndescription: Companion skill.\n---\n# Consume\n")
+	writeMockConcept(t, dir, "metrics/mrr.md", "---\ntype: Metric\ntitle: MRR\n---\n# MRR\n")
+
+	b, err := ParseBundle(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("ParseBundle error: %v", err)
+	}
+	if len(b.Concepts) != 1 {
+		t.Fatalf("expected 1 concept (metrics/mrr), got %d: %v", len(b.Concepts), b.Concepts)
+	}
+	if _, ok := b.Concepts["metrics/mrr"]; !ok {
+		t.Errorf("expected metrics/mrr in Concepts")
+	}
+	if len(b.SkippedFiles) != 3 {
+		t.Errorf("expected 3 skipped files (AGENTS.md, README.md, SKILL.md), got %v", b.SkippedFiles)
+	}
+	if b.OKFVersion != "0.3" || b.Title != "Acme Bundle" || b.Description != "Curated knowledge." || b.License != "Apache-2.0" {
+		t.Errorf("unexpected root index metadata: ver=%q title=%q desc=%q license=%q", b.OKFVersion, b.Title, b.Description, b.License)
+	}
+	if lg, ok := b.LogFiles["log.md"]; !ok || lg.HasFrontmatter {
+		t.Errorf("expected log.md in LogFiles without frontmatter, got %+v", lg)
+	}
+}
+
+func TestParseConceptReader_IndentedDashInsideBlockScalar(t *testing.T) {
+	raw := `---
+type: Attestation
+title: Block Scalar Fence Test
+attestation:
+  query: |
+    SELECT 1
+    ---
+    SELECT 2
+  executor: BigQuery
+---
+
+# Body Heading
+`
+	c, err := ParseConceptReader(strings.NewReader(raw), "attestations/q.md", "attestations/q")
+	if err != nil {
+		t.Fatalf("expected indented '---' inside YAML block scalar not to close frontmatter early, got err: %v", err)
+	}
+	if c.Frontmatter.Attestation == nil || !strings.Contains(c.Frontmatter.Attestation.Query, "SELECT 2") {
+		t.Errorf("expected full multiline query including lines after indented '---', got: %+v", c.Frontmatter.Attestation)
+	}
+	if !strings.Contains(c.Body, "# Body Heading") {
+		t.Errorf("unexpected body: %q", c.Body)
+	}
+}

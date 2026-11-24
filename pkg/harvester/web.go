@@ -110,9 +110,12 @@ func (h *WebHarvester) Harvest(ctx context.Context) ([]*bundle.Concept, error) {
 			}
 		}
 
-		// Always set the resource and timestamp
+		// Always set the resource and generated actor metadata (OKF v0.3 §5.2)
 		fm.Resource = e.Request.URL.String()
-		fm.Timestamp = time.Now().Format(time.RFC3339)
+		fm.Generated = &bundle.ActorInfo{
+			By: "okf-harvester/v0.3",
+			At: time.Now().UTC().Format(time.RFC3339),
+		}
 
 		concept := &bundle.Concept{
 			ID:          id,

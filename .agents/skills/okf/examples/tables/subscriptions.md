@@ -6,13 +6,11 @@ resource: "my-project.analytics.subscriptions"
 tags:
   - "billing"
   - "schema"
-timestamp: "2026-08-01T12:00:00Z"
-
 status: "stable"
 stale_after: "2027-01-01T00:00:00Z"
 
 generated:
-  by: "okf-harvester/v0.2"
+  by: "okf-harvester/v0.3"
   at: "2026-08-01T12:00:00Z"
 
 verified:
@@ -36,5 +34,5 @@ verified:
 | `updated_at` | TIMESTAMP | Yes | Last status update timestamp. |
 
 ## Related Concepts
-- Metric: [Monthly Recurring Revenue (MRR)](../metrics/mrr.md)
-- Attested Computation: [Sanctioned MRR Calculation Query](../attestations/mrr_query.md)
+- Metric: [Monthly Recurring Revenue (MRR)](/metrics/mrr.md)
+- Attested Computation: [Sanctioned MRR Calculation Query](/attestations/mrr_query.md)

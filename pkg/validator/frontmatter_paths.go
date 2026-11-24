@@ -59,6 +59,10 @@ func isExplicitPath(target string) bool {
 }
 
 func validateFrontmatterPaths(c *bundle.Concept, b *bundle.Bundle) []Issue {
+	return validateFrontmatterPathsWithRoots(c, b, resolveBundleRoots(b))
+}
+
+func validateFrontmatterPathsWithRoots(c *bundle.Concept, b *bundle.Bundle, roots bundleRoots) []Issue {
 	var issues []Issue
 	check := func(field, value string, pathRequired bool) {
 		if strings.TrimSpace(value) == "" || isExternalResource(value) {
@@ -67,10 +71,11 @@ func validateFrontmatterPaths(c *bundle.Concept, b *bundle.Bundle) []Issue {
 		if !pathRequired && !looksLikeBundlePath(value) {
 			return
 		}
-		issues = append(issues, validateFrontmatterPath(c, b, field, value, pathRequired)...)
+		issues = append(issues, validateFrontmatterPathWithRoots(c, b, field, value, pathRequired, roots)...)
 	}
 
 	check("resource", c.Frontmatter.Resource, false)
+	check("superseded_by", c.Frontmatter.SupersededBy, true)
 	for i, source := range c.Frontmatter.Sources {
 		check(fmt.Sprintf("sources[%d].resource", i), source.Resource, false)
 	}
@@ -87,40 +92,52 @@ func validateFrontmatterPaths(c *bundle.Concept, b *bundle.Bundle) []Issue {
 	return issues
 }
 
-// validateFrontmatterPath resolves a frontmatter path against its concept and bundle,
+// validateFrontmatterPathWithRoots resolves a frontmatter path against its concept and bundle,
 // then warns when the target is missing, is not a file, or escapes the bundle root.
-func validateFrontmatterPath(c *bundle.Concept, b *bundle.Bundle, field, value string, pathRequired bool) []Issue {
+func validateFrontmatterPathWithRoots(c *bundle.Concept, b *bundle.Bundle, field, value string, pathRequired bool, roots bundleRoots) []Issue {
 	target := strings.TrimSpace(strings.SplitN(value, "#", 2)[0])
 	target = strings.ReplaceAll(target, "\\", "/")
 	if target == "" {
 		return nil
 	}
 
-	var resolved string
-	if strings.HasPrefix(target, "/") {
-		// A leading slash anchors the path at the bundle root.
-		resolved = path.Clean(strings.TrimPrefix(target, "/"))
-	} else {
-		// Relative paths, including bare filenames like query.sql, are resolved
-		// from the directory containing this concept.
-		resolved = path.Clean(path.Join(path.Dir(filepath.ToSlash(c.Path)), target))
+	rawBundlePath := ""
+	okfVer := ""
+	if b != nil {
+		rawBundlePath = b.Path
+		okfVer = b.OKFVersion
 	}
+	resolved, escaped := links.ResolveBundlePath(rawBundlePath, c.Path, target, okfVer)
 	// Reject paths that traverse above the bundle root or specify a volume.
-	if resolved == ".." || strings.HasPrefix(resolved, "../") || filepath.VolumeName(filepath.FromSlash(target)) != "" {
+	if escaped {
 		return []Issue{frontmatterPathIssue(c, fmt.Sprintf("frontmatter path field '%s' references a path outside the bundle: %q", field, value))}
 	}
 
-	if strings.EqualFold(path.Ext(resolved), ".md") {
+	if b != nil && strings.EqualFold(path.Ext(resolved), ".md") {
 		conceptID := strings.TrimSuffix(resolved, path.Ext(resolved))
 		if _, exists := b.GetConcept(conceptID); exists {
 			return nil
 		}
 	}
 
-	bundleRoot, err := filepath.Abs(b.Path)
-	if err != nil {
-		return []Issue{frontmatterPathIssue(c, fmt.Sprintf("could not resolve frontmatter path field '%s' (%q): %v", field, value, err))}
+	var bundleRoot, realRoot string
+	var realErr error
+	if roots.hasPath {
+		if roots.absErr != nil {
+			return []Issue{frontmatterPathIssue(c, fmt.Sprintf("could not resolve frontmatter path field '%s' (%q): %v", field, value, roots.absErr))}
+		}
+		bundleRoot = roots.absRoot
+		realRoot = roots.realRoot
+		realErr = roots.realErr
+	} else {
+		var err error
+		bundleRoot, err = filepath.Abs(rawBundlePath)
+		if err != nil {
+			return []Issue{frontmatterPathIssue(c, fmt.Sprintf("could not resolve frontmatter path field '%s' (%q): %v", field, value, err))}
+		}
+		realRoot, realErr = filepath.EvalSymlinks(bundleRoot)
 	}
+
 	targetPath := filepath.Join(bundleRoot, filepath.FromSlash(resolved))
 	// Check containment after joining to ensure the target remains a bundle subpath.
 	relativePath, err := filepath.Rel(bundleRoot, targetPath)
@@ -142,9 +159,8 @@ func validateFrontmatterPath(c *bundle.Concept, b *bundle.Bundle, field, value s
 		return []Issue{frontmatterPathIssue(c, fmt.Sprintf("frontmatter path field '%s' references a directory, not a file: %q", field, value))}
 	}
 
-	realRoot, err := filepath.EvalSymlinks(bundleRoot)
-	if err != nil {
-		return []Issue{frontmatterPathIssue(c, fmt.Sprintf("could not resolve bundle root for frontmatter path field '%s': %v", field, err))}
+	if realErr != nil {
+		return []Issue{frontmatterPathIssue(c, fmt.Sprintf("could not resolve bundle root for frontmatter path field '%s': %v", field, realErr))}
 	}
 	realTarget, err := filepath.EvalSymlinks(targetPath)
 	if err != nil {
