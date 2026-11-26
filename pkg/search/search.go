@@ -1,3 +1,4 @@
+// Package search queries an OKF Hub registry for bundles matching text and tag filters.
 package search
 
 import (

@@ -1,3 +1,4 @@
+// Package config manages local OKF Hub configuration and API key resolution.
 package config
 
 import (

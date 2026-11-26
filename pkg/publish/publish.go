@@ -1,3 +1,4 @@
+// Package publish uploads parsed OKF bundles and concept link graphs to an OKF Hub registry.
 package publish
 
 import (

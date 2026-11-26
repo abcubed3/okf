@@ -1,3 +1,4 @@
+// Package telemetry dispatches opt-in anonymous OKF CLI usage events.
 package telemetry
 
 import (

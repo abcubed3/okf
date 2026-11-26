@@ -1,3 +1,4 @@
+// Package pull downloads remote OKF Hub bundles and writes concepts to local Markdown files.
 package pull
 
 import (

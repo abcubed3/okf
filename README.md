@@ -9,7 +9,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/abcubed3/okf/releases"><img src="https://img.shields.io/badge/release-v1.0.9-blue.svg" alt="Release" /></a>
+  <a href="https://pkg.go.dev/github.com/abcubed3/okf"><img src="https://pkg.go.dev/badge/github.com/abcubed3/okf.svg" alt="Go Reference" /></a>
+  <a href="https://github.com/abcubed3/okf/releases"><img src="https://img.shields.io/github/v/release/abcubed3/okf" alt="Release" /></a>
   <a href="https://okf.md"><img src="https://img.shields.io/badge/OKF%20Spec-v0.3-green.svg" alt="OKF Spec v0.3" /></a>
   <a href="https://ghcr.io/abcubed3/okf"><img src="https://img.shields.io/badge/container-ghcr.io-blue.svg" alt="Container" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License" /></a>
@@ -41,10 +42,16 @@ Instead of scattering context across wikis, SQL catalogs, and ad-hoc prompts, yo
 curl -sSfL https://okfgo.dev/install.sh | sh
 ```
 
-**Go:**
+**Go CLI:**
 
 ```bash
 go install github.com/abcubed3/okf/cmd/okf@latest
+```
+
+**Go SDK (Library):**
+
+```bash
+go get github.com/abcubed3/okf@latest
 ```
 
 **Docker:**
@@ -138,6 +145,79 @@ Derived from active records in [Subscriptions](../tables/subscriptions.md).[^bil
 ```
 
 ![OKF Concept Document Structure](okf_concept_visual.jpg)
+
+---
+
+## Go SDK
+
+All core capabilities of OKF-go are exposed as reusable Go packages under `github.com/abcubed3/okf/pkg/...` (full reference in [`./pkg/README.md`](./pkg/README.md) and on [`pkg.go.dev`](https://pkg.go.dev/github.com/abcubed3/okf)).
+
+```bash
+go get github.com/abcubed3/okf@latest
+```
+
+### Example: Parse, Validate, and Assemble Bounded Context
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+
+	"github.com/abcubed3/okf/pkg/assembly"
+	"github.com/abcubed3/okf/pkg/parser"
+	"github.com/abcubed3/okf/pkg/validator"
+)
+
+func main() {
+	ctx := context.Background()
+
+	// 1. Parse an OKF Markdown bundle concurrently
+	b, err := parser.ParseBundle(ctx, "./knowledge")
+	if err != nil {
+		log.Fatalf("parse bundle: %v", err)
+	}
+
+	// 2. Validate frontmatter, links, and OKF v0.3 trust signals
+	for _, issue := range validator.ValidateBundle(b, validator.Options{}) {
+		if issue.Severity == validator.SeverityError {
+			log.Fatalf("%s: %s", issue.Path, issue.Message)
+		}
+	}
+
+	// 3. Build the bidirectional concept graph and assemble bounded LLM context
+	graph := assembly.BuildGraph(b)
+	opts := assembly.DefaultOptions()
+	opts.MaxCharacters = 12000
+	opts.Format = "markdown"
+
+	res, err := assembly.AssembleContext(graph, "metrics/mrr", opts)
+	if err != nil {
+		log.Fatalf("assemble context: %v", err)
+	}
+	fmt.Printf("Assembled %d nodes (%d tokens):\n%s\n", len(res.Nodes), res.TotalTokens, res.Context)
+}
+```
+
+### Core SDK Packages
+
+| Package | Description |
+| :--- | :--- |
+| [`pkg/bundle`](./pkg/bundle/README.md) | Core `Bundle` and `Concept` domain models, OKF v0.3 trust tiers, v0.3 migration, diffing, and merging |
+| [`pkg/parser`](./pkg/parser/README.md) | Concurrent Markdown + YAML frontmatter bundle parser and shallow Git URL resolver |
+| [`pkg/validator`](./pkg/validator/README.md) | OKF v0.1–v0.3 conformance, link integrity, footnote provenance, and trust-signal validator |
+| [`pkg/assembly`](./pkg/assembly/README.md) | Bidirectional concept link graph (`BuildGraph`) and token/character-bounded BFS context assembler |
+| [`pkg/harvester`](./pkg/harvester/README.md) | Schema & metadata harvesters for Postgres, MySQL, BigQuery, Spanner, OpenAPI, Protobuf, Git, and Web |
+| [`pkg/server/mcp`](./pkg/server/mcp/README.md) | Embeddable Model Context Protocol (MCP) server over stdio and HTTP with live `fsnotify` reload |
+| [`pkg/server/lsp`](./pkg/server/lsp/README.md) | Embeddable Language Server Protocol (LSP 3.16) diagnostics server |
+| [`pkg/skill`](./pkg/skill/README.md) | Agent Skill (`SKILL.md`) compiler and embedded official OKF skill installer |
+| [`pkg/export`](./pkg/export/README.md) | Schema.org JSON-LD graph exporter (`Dataset`, `WebAPI`, `TechArticle`) |
+| [`pkg/generator`](./pkg/generator/README.md) | Interactive static HTML documentation and graph portal compiler |
+| [`pkg/ai`](./pkg/ai/README.md) | Gemini-backed schema curation and graph-grounded bundle Q&A (`AskBundle`) |
+
+See [`./pkg/README.md`](./pkg/README.md) for the complete SDK guide (including `sync`, `publish`, `pull`, `search`, and `config`).
 
 ---
 
